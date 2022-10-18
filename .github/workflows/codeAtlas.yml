@@ -1,5 +1,10 @@
-name: Codeatlas - Codebase Visualisation
-  uses: codeatlasHQ/codebase-visualizer-action@v1-beta
-  with:
-    # Sub-directory to start visualisation from.
-    sub_directory: # optional, default is 
+on: [workflow_dispatch]
+
+jobs:
+  codeatlas:
+    runs-on: ubuntu-latest
+    name: Codeatlas
+    steps:
+      - uses: actions/checkout@v3
+      - id: codeatlas
+        uses: codeatlasHQ/codebase-visualizer-action@v1-beta
