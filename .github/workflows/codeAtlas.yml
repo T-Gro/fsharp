@@ -1,0 +1,7 @@
+- name: Codeatlas - Codebase Visualisation
+  # You may pin to the exact commit or the version.
+  # uses: codeatlasHQ/codebase-visualizer-action@b13829b48b2efaa576d40dd4182db7512e3e7aae
+  uses: codeatlasHQ/codebase-visualizer-action@v1-beta
+  with:
+    # Sub-directory to start visualisation from.
+    sub_directory: # optional, default is 
