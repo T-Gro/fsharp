@@ -1,3 +1,4 @@
+#paralell_compilation_group "independent_component_tests" 
 namespace FSharp.Compiler.ComponentTests.Language
 
 open Xunit

@@ -1,4 +1,5 @@
-﻿namespace FSharp.Compiler.ComponentTests.ErrorMessages
+#paralell_compilation_group "independent_component_tests" 
+namespace FSharp.Compiler.ComponentTests.ErrorMessages
 module UnionCasePatternMatchingErrors = 
 
     open Xunit

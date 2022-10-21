@@ -1,4 +1,5 @@
-﻿namespace FSharp.Compiler.ComponentTests.Interop
+#paralell_compilation_group "independent_component_tests" 
+namespace FSharp.Compiler.ComponentTests.Interop
 
 open Xunit
 open FSharp.Test.Compiler

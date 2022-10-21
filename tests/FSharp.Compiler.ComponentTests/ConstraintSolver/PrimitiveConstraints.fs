@@ -1,4 +1,5 @@
-﻿// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
+#paralell_compilation_group "independent_component_tests" 
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
 
 namespace FSharp.Compiler.ComponentTests.ConstraintSolver
 

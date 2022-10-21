@@ -1,4 +1,5 @@
-﻿namespace FSharp.Compiler.ComponentTests.TypeChecks
+#paralell_compilation_group "independent_component_tests" 
+namespace FSharp.Compiler.ComponentTests.TypeChecks
 
 module ParallelCheckingWithHashDirectiveTests = 
 

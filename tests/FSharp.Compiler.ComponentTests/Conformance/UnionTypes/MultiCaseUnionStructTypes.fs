@@ -1,4 +1,5 @@
-﻿namespace FSharp.Compiler.ComponentTests.Conformance
+#paralell_compilation_group "independent_component_tests" 
+namespace FSharp.Compiler.ComponentTests.Conformance
 
 open Xunit
 open FSharp.Test.Compiler

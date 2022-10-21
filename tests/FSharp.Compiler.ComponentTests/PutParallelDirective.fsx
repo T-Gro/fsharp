@@ -22,4 +22,4 @@ for f in compiledFiles do
         let newSource = hashDirective + Environment.NewLine + source
         File.WriteAllText(f,newSource)
     else
-        printfn "Bad: %s" f
+        printfn "Not applied: %s" f

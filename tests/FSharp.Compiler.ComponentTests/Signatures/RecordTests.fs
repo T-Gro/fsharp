@@ -1,4 +1,5 @@
-﻿namespace FSharp.Compiler.ComponentTests.Signatures
+#paralell_compilation_group "independent_component_tests" 
+namespace FSharp.Compiler.ComponentTests.Signatures
 module RecordTests = 
 
     open Xunit
