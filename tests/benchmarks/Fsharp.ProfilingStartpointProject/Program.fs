@@ -19,6 +19,8 @@ let bench = new FileCascadeBenchmarks()
 bench.GenerateFSI <- true
 do bench.Setup()
 
+let deeplyNested = new DeeplyNestedCallBenchmark.DeeplyNestedFileBenchmark()
+
 (*
 This project was created as an easy entry point for low-level profiling of FCS operations.
 The only purpose is the easy of setup (simply set as startup project and launch) so that a profiler can be connected.
@@ -33,15 +35,21 @@ let main args =
     | ["no-change"] -> 
         for i=1 to 256 do
             printfn "***************************"
-            printfn "ITERATION %i" i
+            printfn "NoChange ITERATION %i" i
             printfn "***************************"
             bench.ParseAndCheckLastFileProjectAsIs()  |> ignore         
     | ["mid-change"] ->
         for i=1 to 16 do
             printfn "***************************"
-            printfn "ITERATION %i" i
+            printfn "MidChange ITERATION %i" i
             printfn "***************************"
             bench.ParseProjectWithChangingMiddleFile() |> ignore
+    | ["deeply-nested"] ->
+        for i=1 to 4 do
+            printfn "***************************"
+            printfn "DeeplyNested ITERATION %i" i
+            printfn "***************************"
+            deeplyNested.Optimized() |> ignore
     | _ -> failwith "Invalid args. Use cache-clear or mid-change"
     |> ignore
     0

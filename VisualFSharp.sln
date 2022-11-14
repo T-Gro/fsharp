@@ -187,6 +187,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "FCSBenchmarks", "FCSBenchmarks", "{39CDF34B-FB23-49AE-AB27-0975DA379BB5}"
 	ProjectSection(SolutionItems) = preProject
 		tests\benchmarks\FCSBenchmarks\decentlySizedStandAloneFile.fs = tests\benchmarks\FCSBenchmarks\decentlySizedStandAloneFile.fs
+		tests\benchmarks\FCSBenchmarks\deeplyNestedProgram.fs = tests\benchmarks\FCSBenchmarks\deeplyNestedProgram.fs
 		tests\benchmarks\FCSBenchmarks\README.md = tests\benchmarks\FCSBenchmarks\README.md
 		tests\benchmarks\FCSBenchmarks\SmokeTestAllBenchmarks.ps1 = tests\benchmarks\FCSBenchmarks\SmokeTestAllBenchmarks.ps1
 	EndProjectSection
