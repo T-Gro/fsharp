@@ -145,6 +145,33 @@ let foo x = x ++ 4""" })
             ])
         }
 
+[<Fact>]
+let ``We find references even after making a change and saving a file`` () = 
+
+    let massiveFile = @"C:\code\myFsharpFork\tests\FSharp.Compiler.ComponentTests\FSharpChecker\MassiveFile.txt"
+    let massiveContents = System.IO.File.ReadAllText(massiveFile)
+
+
+    SyntheticProject.Create(
+        { sourceFile "First" [] with ExtraSource = """
+let myFunc() = 42
+let x = myFunc()""" },
+        { sourceFile "Second" [] with ExtraSource = """
+open ModuleFirst
+let foo = myFunc()""" })
+        .Workflow {
+            placeCursor "First" 7 10 "let myFunc () = 42" ["myFunc"]
+            updateFile "First" (fun f -> {f with ExtraSource = f.ExtraSource + System.Environment.NewLine + massiveContents})
+            updateFile "First" (setPublicVersion 2112)
+            checkWithoutWaiting "First"
+            saveFile "First"      
+            findAllReferences (expectToFind [
+                "FileFirst.fs", 7, 4, 10
+                "FileFirst.fs", 8, 8, 14
+                "FileSecond.fs", 8, 10, 16
+            ])
+        }
+
 module Attributes =
 
     let project() = SyntheticProject.Create(

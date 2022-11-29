@@ -487,6 +487,16 @@ type ProjectWorkflowBuilder(initialProject: SyntheticProject, ?checker: FSharpCh
             return { ctx with Signatures = ctx.Signatures.Add(fileId, newSignature) }
         }
 
+    /// Pretend to be VS who just asked to typecheck a file
+    [<CustomOperation "checkWithoutWaiting">]
+    member this.CheckFileWithoutWaiting(workflow: Async<WorkflowContext>, fileId: string) =
+        async {
+            let! ctx = workflow
+            let asyncCheck = checkFile fileId ctx.Project checker 
+            Async.StartAsTask(asyncCheck) |> ignore
+            return ctx
+        }
+
     /// Find a symbol using the provided range, mimicking placing a cursor on it in IDE scenarios
     [<CustomOperation "placeCursor">]
     member this.PlaceCursor(workflow: Async<WorkflowContext>, fileId, line, colAtEndOfNames, fullLine, symbolNames) =
@@ -519,7 +529,7 @@ type ProjectWorkflowBuilder(initialProject: SyntheticProject, ?checker: FSharpCh
 
             let file = ctx.Project.Find fileId
             let absFileName = ctx.Project.ProjectDir ++ file.FileName
-            let! results = checker.FindBackgroundReferencesInFile(absFileName, options, symbolUse.Symbol, fastCheck = true)
+            let! results = checker.FindBackgroundReferencesInFile(absFileName, options, symbolUse.Symbol, fastCheck = true, canInvalidateProject = false)
 
             processResults (results |> Seq.toList)
 
@@ -540,7 +550,7 @@ type ProjectWorkflowBuilder(initialProject: SyntheticProject, ?checker: FSharpCh
 
             let! results =
                 [ for f in options.SourceFiles do
-                      checker.FindBackgroundReferencesInFile(f, options, symbolUse.Symbol, fastCheck = true) ]
+                      checker.FindBackgroundReferencesInFile(f, options, symbolUse.Symbol, fastCheck = true, canInvalidateProject = false) ]
                 |> Async.Parallel
 
             results |> Seq.collect id |> Seq.toList |> processResults
