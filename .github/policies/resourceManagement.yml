@@ -7,7 +7,7 @@ disabled: false
 where: 
 configuration:
   resourceManagementConfiguration:
-    eventResponderTasks:    
+    eventResponderTasks:
     - if:
       - payloadType: Issues
       - labelAdded:
