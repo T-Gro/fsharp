@@ -1,7 +1,7 @@
 # F# Testing proposal
 
 ## Why do we test
-
+czxczx
 * To prevent regressions (behavioral, performance).
 * To have a quicker debug feedback (thus, find problems quicker).
 * To verify conformance to language spec (API contract testing).
