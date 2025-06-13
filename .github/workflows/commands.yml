@@ -111,7 +111,7 @@ jobs:
       - name: Apply and push patch
         if: ${{ steps.read-meta.outputs.step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
         run: |
-          patch -p1 < repo.patch
+          patch -p1 -s --force < repo.patch || true
           git config user.name "GH Actions"
           git config user.email "actions@github.com"
           git add -A
