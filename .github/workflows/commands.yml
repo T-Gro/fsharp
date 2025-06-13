@@ -87,12 +87,15 @@ jobs:
       pull-requests: write
     if: needs.detect-and-run.outputs.command != ''
     steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+          
       - name: Checkout PR branch
-        run: |
-          gh auth setup-git
-          gh pr checkout ${{ github.event.issue.number }}
+        if: ${{ steps.parse.outputs.command }}
+        run: gh auth setup-git && gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
