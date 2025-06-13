@@ -36,6 +36,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Install dotnet tools
+        run: dotnet tool restore
+
       - name: Run command
         id: run-cmd
         env:
