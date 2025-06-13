@@ -26,9 +26,7 @@ jobs:
 
       - name: Checkout PR branch
         if: ${{ steps.parse.outputs.command }}
-        run: |
-          gh auth setup-git
-          gh pr checkout ${{ github.event.issue.number }}
+        run: gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -152,12 +150,6 @@ jobs:
           # Store for use in next step
           echo "$report" > pr_report.md
 
-      - name: Determine PR number
-        if: always()
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
-          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV  
-
       - name: Comment on PR
         if: always()
         env:
@@ -165,5 +157,5 @@ jobs:
           PR_NUMBER: ${{ env.PR_NUMBER }}
         run: |
           # Use gh CLI to comment with multi-line markdown
-          gh pr comment "$PR_NUMBER" \
+          gh pr comment ${{ github.event.issue.number }} \
             --body-file pr_report.md
