@@ -13,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       command: ${{ steps.parse.outputs.command }}
-      step_outcome: ${{ steps.run-cmd.outcome }}
-      has_patch: ${{ steps.meta.outputs.hasPatch }}
+      arg: ${{ steps.parse.outputs.arguments }}
     if: github.event.issue.pull_request
     steps:
       - name: Parse comment
@@ -26,6 +25,7 @@ jobs:
             /run fantomas
             /run ilverify
             /run xlf
+            /run test-baseline
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout the repository
@@ -55,6 +55,7 @@ jobs:
             "/run fantomas") dotnet fantomas . ;;
             "/run xlf") dotnet build src/Compiler /t:UpdateXlf ;;
             "/run ilverify") pwsh tests/ILVerify/ilverify.ps1 ;;
+            "/run test-baseline") dotnet test ./FSharp.Compiler.Service.sln --filter "${{ steps.parse.outputs.arguments }}" -c Release ;;
             *) echo "Unknown command" && exit 1 ;;
           esac
 
@@ -62,7 +63,7 @@ jobs:
         id: meta
         if: steps.parse.outputs.command
         run: |
-          echo "outcome=${{ steps.run-cmd.outcome }}" > result
+          echo "run_step_outcome=${{ steps.run-cmd.outcome }}" > result
           if [[ "${{ steps.run-cmd.outcome }}" == "success" ]]; then
             git diff > repo.patch || true
             if [ -s repo.patch ]; then echo "hasPatch=true" >> result; else echo "hasPatch=false" >> result; fi
@@ -104,11 +105,11 @@ jobs:
         id: read-meta
         run: |
           source result
-          echo "step_outcome=$outcome" >> $GITHUB_OUTPUT
+          echo "run_step_outcome=$run_step_outcome" >> $GITHUB_OUTPUT
           echo "hasPatch=$hasPatch" >> $GITHUB_OUTPUT
 
       - name: Apply and push patch
-        if: ${{ steps.read-meta.outputs.step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
+        if: ${{ steps.read-meta.outputs.run_step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
         run: |
           patch -p1 -s --force < repo.patch || true
           git config user.name "GH Actions"
@@ -124,7 +125,7 @@ jobs:
 
       - name: Count stats
         id: stats
-        if: ${{ steps.read-meta.outputs.step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
+        if: ${{ steps.read-meta.outputs.run_step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
         run: |
           files=$(git diff --name-only HEAD~1 HEAD | wc -l)
           lines=$(git diff HEAD~1 HEAD | wc -l)
@@ -134,8 +135,8 @@ jobs:
         if: always()
         env:
           COMMAND: ${{ needs.detect-and-run.outputs.command }}
-          OUTCOME: ${{ needs.detect-and-run.outputs.outcome }}
-          PATCH: ${{ needs.detect-and-run.outputs.hasPatch }}
+          OUTCOME: ${{ steps.read-meta.outputs.run_step_outcome }}
+          PATCH: ${{ steps.read-meta.outputs.hasPatch }}
         run: |
           # Build the markdown report
           report="
