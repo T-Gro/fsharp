@@ -91,7 +91,6 @@ jobs:
         uses: actions/checkout@v4
           
       - name: Checkout PR branch
-        if: ${{ steps.parse.outputs.command }}
         run: gh auth setup-git && gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +112,8 @@ jobs:
         run: |
           patch -p1 -s --force < repo.patch || true
           git config user.name "GH Actions"
-          git config user.email "actions@github.com"
+          git config user.email "actions@github.com"          
+          git add -u
           git commit -m "Apply patch from `${{ needs.detect-and-run.outputs.command }}`"
           upstream=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
           remote=${upstream%%/*}
