@@ -61,7 +61,7 @@ jobs:
             "/run fantomas") dotnet fantomas . ;;
             "/run xlf") dotnet build src/Compiler /t:UpdateXlf ;;
             "/run ilverify") pwsh tests/ILVerify/ilverify.ps1 ;;
-            "/run test-baseline") dotnet test ./FSharp.Compiler.Service.sln --filter "${{ steps.parse.outputs.arguments }}" -c Release ;;
+            "/run test-baseline") dotnet test ./FSharp.Compiler.Service.sln --filter "${{ steps.parse.outputs.arguments }}" -c Release || true ;;
             *) echo "Unknown command" && exit 1 ;;
           esac
 
