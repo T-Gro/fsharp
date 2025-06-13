@@ -148,7 +148,6 @@ let DetupleRewriteStackGuardDepth = StackGuard.GetDepthOption "DetupleRewrite"
 //       no longer can assume that all call sites have explicit tuples if collapsing.
 //       in these new cases, take care to have let binding sequence (eval order...)
 
-
 // Merge a tyapp node and app node.
 [<return: Struct>]
 let (|TyappAndApp|_|) e =
@@ -167,7 +166,8 @@ module GlobalUsageAnalysis =
     let GetValsBoundInExpr expr =
         let folder =
             { ExprFolder0 with
-                valBindingSiteIntercept = bindAccBounds }
+                valBindingSiteIntercept = bindAccBounds
+            }
 
         let z0 = Zset.empty valOrder
         let z = FoldExpr folder z0 expr
@@ -200,12 +200,14 @@ module GlobalUsageAnalysis =
         }
 
     let z0 =
-        { Uses = Zmap.empty valOrder
-          Defns = Zmap.empty valOrder
-          RecursiveBindings = Zmap.empty valOrder
-          DecisionTreeBindings = Zset.empty valOrder
-          TopLevelBindings = Zset.empty valOrder
-          IterationIsAtTopLevel = true }
+        {
+            Uses = Zmap.empty valOrder
+            Defns = Zmap.empty valOrder
+            RecursiveBindings = Zmap.empty valOrder
+            DecisionTreeBindings = Zset.empty valOrder
+            TopLevelBindings = Zset.empty valOrder
+            IterationIsAtTopLevel = true
+        }
 
     /// Log the use of a value with a particular tuple shape at a callsite
     /// Note: this routine is called very frequently
@@ -214,21 +216,24 @@ module GlobalUsageAnalysis =
             Uses =
                 match Zmap.tryFind f z.Uses with
                 | Some sites -> Zmap.add f (tup :: sites) z.Uses
-                | None -> Zmap.add f [ tup ] z.Uses }
+                | None -> Zmap.add f [ tup ] z.Uses
+        }
 
     /// Log the definition of a binding
     let logBinding z (isInDTree, v) =
         let z =
             if isInDTree then
                 { z with
-                    DecisionTreeBindings = Zset.add v z.DecisionTreeBindings }
+                    DecisionTreeBindings = Zset.add v z.DecisionTreeBindings
+                }
             else
                 z
 
         let z =
             if z.IterationIsAtTopLevel then
                 { z with
-                    TopLevelBindings = Zset.add v z.TopLevelBindings }
+                    TopLevelBindings = Zset.add v z.TopLevelBindings
+                }
             else
                 z
 
@@ -241,7 +246,8 @@ module GlobalUsageAnalysis =
 
         { z with
             RecursiveBindings = Zmap.add v (false, vs) z.RecursiveBindings
-            Defns = Zmap.add v bind.Expr z.Defns }
+            Defns = Zmap.add v bind.Expr z.Defns
+        }
 
     /// Log the definition of a recursive binding
     let logRecBindings z binds =
@@ -253,7 +259,8 @@ module GlobalUsageAnalysis =
                 ||> List.fold (fun mubinds v -> Zmap.add v (true, vs) mubinds)
             Defns =
                 (z.Defns, binds)
-                ||> List.fold (fun eqns bind -> Zmap.add bind.Var bind.Expr eqns) }
+                ||> List.fold (fun eqns bind -> Zmap.add bind.Var bind.Expr eqns)
+        }
 
     /// Work locally under a lambda of some kind
     let foldUnderLambda f z x =
@@ -336,7 +343,8 @@ module GlobalUsageAnalysis =
             recBindingsIntercept = logRecBindings
             valBindingSiteIntercept = logBinding
             targetIntercept = targetIntercept
-            tmethodIntercept = tmethodIntercept }
+            tmethodIntercept = tmethodIntercept
+        }
 
     //-------------------------------------------------------------------------
     // GlobalUsageAnalysis - entry point
@@ -406,8 +414,7 @@ let checkTS =
 /// explicit tuple-structure in expr
 let rec uncheckedExprTS expr =
     match expr with
-    | Expr.Op(TOp.Tuple tupInfo, _tys, args, _) when not (evalTupInfoIsStruct tupInfo) ->
-        TupleTS(List.map uncheckedExprTS args)
+    | Expr.Op(TOp.Tuple tupInfo, _tys, args, _) when not (evalTupInfoIsStruct tupInfo) -> TupleTS(List.map uncheckedExprTS args)
     | _ -> UnknownTS
 
 let rec uncheckedTypeTS g ty =
@@ -490,10 +497,11 @@ type TransformedFormal =
 /// - yb1..ybp - replacement formal choices for x1...xp.
 /// - transformedVal       - replaces f.
 type Transform =
-    { transformCallPattern: CallPattern
-      transformedFormals: TransformedFormal list
-      transformedVal: Val }
-
+    {
+        transformCallPattern: CallPattern
+        transformedFormals: TransformedFormal list
+        transformedVal: Val
+    }
 
 //-------------------------------------------------------------------------
 // transform - mkTransform - decided, create necessary stuff
@@ -535,14 +543,7 @@ let mkTransform g (f: Val) m tps x1Ntys retTy (callPattern, tyfringes: (TType li
     let valReprInfo =
         match f.ValReprInfo with
         | None -> None
-        | _ ->
-            Some(
-                ValReprInfo(
-                    ValReprInfo.InferTyparInfo tps,
-                    List.collect ValReprInfoForTS callPattern,
-                    ValReprInfo.unnamedRetVal
-                )
-            )
+        | _ -> Some(ValReprInfo(ValReprInfo.InferTyparInfo tps, List.collect ValReprInfoForTS callPattern, ValReprInfo.unnamedRetVal))
     (* type(transformedVal) tyfringes types replace initial arg types of f *)
     let tys1r = List.collect fst tyfringes (* types for collapsed initial r args *)
     let tysrN = List.skip tyfringes.Length x1Ntys (* types for remaining args *)
@@ -559,10 +560,11 @@ let mkTransform g (f: Val) m tps x1Ntys retTy (callPattern, tyfringes: (TType li
             fCty
             valReprInfo
 
-    { transformCallPattern = callPattern
-      transformedFormals = transformedFormals
-      transformedVal = transformedVal }
-
+    {
+        transformCallPattern = callPattern
+        transformedFormals = transformedFormals
+        transformedVal = transformedVal
+    }
 
 //-------------------------------------------------------------------------
 // transform - vTransforms - support
@@ -669,7 +671,6 @@ let decideTransform g z v callPatterns (m, tps, vss: Val list list, retTy) =
     else
         Some(v, mkTransform g v m tps tys retTy (callPattern, tyfringes))
 
-
 //-------------------------------------------------------------------------
 // transform - determineTransforms
 //-------------------------------------------------------------------------
@@ -717,9 +718,10 @@ let determineTransforms g (z: GlobalUsageAnalysis.Results) =
 
 type penv =
     { // The planned transforms
-      transforms: Zmap<Val, Transform>
-      ccu: CcuThunk
-      g: TcGlobals }
+        transforms: Zmap<Val, Transform>
+        ccu: CcuThunk
+        g: TcGlobals
+    }
 
 let hasTransform penv f = Zmap.tryFind f penv.transforms
 
@@ -734,11 +736,13 @@ let hasTransform penv f = Zmap.tryFind f penv.transforms
 *)
 
 type env =
-    { eg: TcGlobals
+    {
+        eg: TcGlobals
 
-      prefix: string
+        prefix: string
 
-      m: range }
+        m: range
+    }
 
     override _.ToString() = "<env>"
 
@@ -859,7 +863,6 @@ let transRebind ybi xi =
     | [ u ], NewArgs(_vs, x) -> [ mkCompGenBind u x ]
     | us, NewArgs(_vs, x) -> List.map2 mkCompGenBind us (tryDestRefTupleExpr x)
 
-
 //-------------------------------------------------------------------------
 // pass - mubinds
 //-------------------------------------------------------------------------
@@ -939,11 +942,13 @@ let postTransformExpr (penv: penv) expr =
 
 let passImplFile penv assembly =
     let rwenv =
-        { PreIntercept = None
-          PreInterceptBinding = None
-          PostTransform = postTransformExpr penv
-          RewriteQuotations = false
-          StackGuard = StackGuard(DetupleRewriteStackGuardDepth, "RewriteImplFile") }
+        {
+            PreIntercept = None
+            PreInterceptBinding = None
+            PostTransform = postTransformExpr penv
+            RewriteQuotations = false
+            StackGuard = StackGuard(DetupleRewriteStackGuardDepth, "RewriteImplFile")
+        }
 
     assembly |> RewriteImplFile rwenv
 
@@ -960,9 +965,11 @@ let DetupleImplFile ccu g expr =
 
     // Pass over term, rewriting bindings and fixing up call sites, under penv
     let penv =
-        { g = g
-          transforms = vtrans
-          ccu = ccu }
+        {
+            g = g
+            transforms = vtrans
+            ccu = ccu
+        }
 
     let expr = passImplFile penv expr
     expr

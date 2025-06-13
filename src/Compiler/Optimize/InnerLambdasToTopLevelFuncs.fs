@@ -22,17 +22,21 @@ open FSharp.Compiler.TcGlobals
 
 let verboseTLR = false
 
-let InnerLambdasToTopLevelFunctionsStackGuardDepth = StackGuard.GetDepthOption "InnerLambdasToTopLevelFunctions"
+let InnerLambdasToTopLevelFunctionsStackGuardDepth =
+    StackGuard.GetDepthOption "InnerLambdasToTopLevelFunctions"
 
 //-------------------------------------------------------------------------
 // library helpers
 //-------------------------------------------------------------------------
 
-let internalError str = dprintf "Error: %s\n" str;raise (Failure str)
+let internalError str =
+    dprintf "Error: %s\n" str
+    raise (Failure str)
 
 module Zmap =
-    let force k   mp (str, soK) =
-        try Zmap.find k mp
+    let force k mp (str, soK) =
+        try
+            Zmap.find k mp
         with exn ->
             dprintf "Zmap.force: %s %s\n" str (soK k)
             PreserveStackTrace exn
@@ -51,12 +55,11 @@ let fringeTR tr =
     let rec collect tr acc =
         match tr with
         | TreeNode subts -> List.foldBack collect subts acc
-        | LeafNode x     -> x :: acc
+        | LeafNode x -> x :: acc
 
     collect tr []
 
-let emptyTR = TreeNode[]
-
+let emptyTR = TreeNode []
 
 //-------------------------------------------------------------------------
 // misc
@@ -69,25 +72,48 @@ let emptyTR = TreeNode[]
 // and combined form, so this function should not be needed
 let destApp (f, fty, tys, args, m) =
     match stripExpr f with
-    | Expr.App (f2, fty2, tys2, [], _) -> (f2, fty2, tys2 @ tys, args, m)
+    | Expr.App(f2, fty2, tys2, [], _) -> (f2, fty2, tys2 @ tys, args, m)
     | Expr.App _ -> (f, fty, tys, args, m) (* has args, so not combine ty args *)
     | f -> (f, fty, tys, args, m)
 
 #if DEBUG
-let showTyparSet tps = showL (commaListL (List.map typarL (Zset.elements tps)))
+let showTyparSet tps =
+    showL (commaListL (List.map typarL (Zset.elements tps)))
 #endif
 
 // CLEANUP NOTE: don't like the look of this function - this distinction
 // should never be needed
 let isDelayedRepr (f: Val) e =
     let _tps, vss, _b, _rty = stripTopLambda (e, f.Type)
-    not(List.isEmpty vss)
-
+    not (List.isEmpty vss)
 
 // REVIEW: these should just be replaced by direct calls to mkLocal, mkCompGenLocal etc.
 // REVIEW: However these set an arity whereas the others don't
 let mkLocalNameTypeArity compgen m name ty valReprInfo =
-    Construct.NewVal(name, m, None, ty, Immutable, compgen, valReprInfo, taccessPublic, ValNotInRecScope, None, NormalVal, [], ValInline.Optional, XmlDoc.Empty, false, false, false, false, false, false, None, ParentNone)
+    Construct.NewVal(
+        name,
+        m,
+        None,
+        ty,
+        Immutable,
+        compgen,
+        valReprInfo,
+        taccessPublic,
+        ValNotInRecScope,
+        None,
+        NormalVal,
+        [],
+        ValInline.Optional,
+        XmlDoc.Empty,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        None,
+        ParentNone
+    )
 
 //-------------------------------------------------------------------------
 // definitions: TLR, arity, arity-met, arity-short
@@ -134,9 +160,11 @@ let mkLocalNameTypeArity compgen m name ty valReprInfo =
 
 let GetValsBoundUnderShouldInline xinfo =
     let accRejectFrom (v: Val) repr rejectS =
-      if v.InlineInfo = ValInline.Always then
-        Zset.union (GetValsBoundInExpr repr) rejectS
-      else rejectS
+        if v.InlineInfo = ValInline.Always then
+            Zset.union (GetValsBoundInExpr repr) rejectS
+        else
+            rejectS
+
     let rejectS = Zset.empty valOrder
     let rejectS = Zmap.fold accRejectFrom xinfo.Defns rejectS
     rejectS
@@ -156,7 +184,16 @@ let IsRefusedTLR g (f: Val) =
     let alreadyChosen = f.ValReprInfo.IsSome
     let isResumableCode = isReturnsResumableCodeTy g f.Type
     let isInlineIfLambda = f.InlineIfLambda
-    let refuseTest = alreadyChosen || mutableVal || byrefVal || specialVal || dllImportStubOrOtherNeverInline || isResumableCode || isInlineIfLambda
+
+    let refuseTest =
+        alreadyChosen
+        || mutableVal
+        || byrefVal
+        || specialVal
+        || dllImportStubOrOtherNeverInline
+        || isResumableCode
+        || isInlineIfLambda
+
     refuseTest
 
 let IsMandatoryTopLevel (f: Val) =
@@ -175,10 +212,12 @@ let IsMandatoryNonTopLevel g (f: Val) =
 module Pass1_DetermineTLRAndArities =
 
     let GetMaxNumArgsAtUses xinfo f =
-       match Zmap.tryFind f xinfo.Uses with
-       | None       -> 0 (* no call sites *)
-       | Some sites ->
-           sites |> List.map (fun (_accessors, _tinst, args) -> List.length args) |> List.max
+        match Zmap.tryFind f xinfo.Uses with
+        | None -> 0 (* no call sites *)
+        | Some sites ->
+            sites
+            |> List.map (fun (_accessors, _tinst, args) -> List.length args)
+            |> List.max
 
     let SelectTLRVals g xinfo f e =
         if IsRefusedTLR g f then
@@ -194,51 +233,57 @@ module Pass1_DetermineTLRAndArities =
             let nFormals = vss.Length
             let nMaxApplied = GetMaxNumArgsAtUses xinfo f
             let arity = Operators.min nFormals nMaxApplied
-            if atTopLevel then
-                Some (f, arity)
-            elif g.realsig then
-                None
-            else if arity<>0 || not (isNil tps) then
-                Some (f, arity)
-            else
-                None
+
+            if atTopLevel then Some(f, arity)
+            elif g.realsig then None
+            else if arity <> 0 || not (isNil tps) then Some(f, arity)
+            else None
 
     /// Check if f involves any value recursion (so can skip those).
     /// ValRec considered: recursive && some f in mutual binding is not bound to a lambda
     let IsValueRecursionFree xinfo f =
 
-        let hasDelayedRepr f = isDelayedRepr f (Zmap.force f xinfo.Defns ("IsValueRecursionFree - hasDelayedRepr", nameOfVal))
-        let isRecursive, mudefs = Zmap.force f xinfo.RecursiveBindings ("IsValueRecursionFree", nameOfVal)
+        let hasDelayedRepr f =
+            isDelayedRepr f (Zmap.force f xinfo.Defns ("IsValueRecursionFree - hasDelayedRepr", nameOfVal))
+
+        let isRecursive, mudefs =
+            Zmap.force f xinfo.RecursiveBindings ("IsValueRecursionFree", nameOfVal)
+
         not isRecursive || List.forall hasDelayedRepr mudefs
 
     let DumpArity arityM =
-        let dump f n = dprintf "tlr: arity %50s = %d\n" (showL (valL f)) n
+        let dump f n =
+            dprintf "tlr: arity %50s = %d\n" (showL (valL f)) n
+
         Zmap.iter dump arityM
 
     let DetermineTLRAndArities g expr =
-       let xinfo = GetUsageInfoOfImplFile g expr
-       let fArities = Zmap.chooseL (SelectTLRVals g xinfo) xinfo.Defns
-       let fArities = List.filter (fst >> IsValueRecursionFree xinfo) fArities
-       // Do not TLR v if it is bound under a shouldinline defn
-       // There is simply no point - the original value will be duplicated and TLR'd anyway
-       let rejectS = GetValsBoundUnderShouldInline xinfo
-       let fArities = List.filter (fun (v, _) -> not (Zset.contains v rejectS)) fArities
-       (*-*)
-       let tlrS = Zset.ofList valOrder (List.map fst fArities)
-       let topValS = xinfo.TopLevelBindings                                 (* genuinely top level *)
-       let topValS = Zset.filter (IsMandatoryNonTopLevel g >> not) topValS  (* restrict *)
+        let xinfo = GetUsageInfoOfImplFile g expr
+        let fArities = Zmap.chooseL (SelectTLRVals g xinfo) xinfo.Defns
+        let fArities = List.filter (fst >> IsValueRecursionFree xinfo) fArities
+        // Do not TLR v if it is bound under a shouldinline defn
+        // There is simply no point - the original value will be duplicated and TLR'd anyway
+        let rejectS = GetValsBoundUnderShouldInline xinfo
+        let fArities = List.filter (fun (v, _) -> not (Zset.contains v rejectS)) fArities
+        (*-*)
+        let tlrS = Zset.ofList valOrder (List.map fst fArities)
+        let topValS = xinfo.TopLevelBindings (* genuinely top level *)
+        let topValS = Zset.filter (IsMandatoryNonTopLevel g >> not) topValS (* restrict *)
 #if DEBUG
-       (* REPORT MISSED CASES *)
-       if verboseTLR then
-           let missed = Zset.diff  xinfo.TopLevelBindings tlrS
-           missed |> Zset.iter (fun v -> dprintf "TopLevel but not TLR = %s\n" v.LogicalName)
-       (* REPORT OVER *)
+        (* REPORT MISSED CASES *)
+        if verboseTLR then
+            let missed = Zset.diff xinfo.TopLevelBindings tlrS
+
+            missed
+            |> Zset.iter (fun v -> dprintf "TopLevel but not TLR = %s\n" v.LogicalName)
+        (* REPORT OVER *)
 #endif
-       let arityM = Zmap.ofList valOrder fArities
+        let arityM = Zmap.ofList valOrder fArities
 #if DEBUG
-       if verboseTLR then DumpArity arityM
+        if verboseTLR then
+            DumpArity arityM
 #endif
-       tlrS, topValS, arityM
+        tlrS, topValS, arityM
 
 (* NOTES:
    For constants,
@@ -295,7 +340,6 @@ module Pass1_DetermineTLRAndArities =
 //      so env(f) may be properly inside env(h),
 //      so better not have env(h) in env(f)!!!].
 
-
 /// The subset of ids from a mutual binding that are chosen to be TLR.
 /// They share a common env.
 /// [Each fclass has an env, the fclass are the handles to envs.]
@@ -305,15 +349,17 @@ type BindingGroupSharingSameReqdItems(bindings: Bindings) =
 
     member fclass.Vals = vals
 
-    member fclass.Contains (v: Val) = vset.Contains v
+    member fclass.Contains(v: Val) = vset.Contains v
 
     member fclass.IsEmpty = isNil vals
 
     member fclass.Pairs = vals |> List.map (fun f -> (f, fclass))
 
-    override fclass.ToString() = "+" + String.concat "+" (List.map nameOfVal vals)
+    override fclass.ToString() =
+        "+" + String.concat "+" (List.map nameOfVal vals)
 
-let fclassOrder = Order.orderOn (fun (b: BindingGroupSharingSameReqdItems) -> b.Vals) (List.order valOrder)
+let fclassOrder =
+    Order.orderOn (fun (b: BindingGroupSharingSameReqdItems) -> b.Vals) (List.order valOrder)
 
 /// It is required to make the TLR closed wrt it's freevars (the env reqdVals0).
 /// For gv a generator,
@@ -321,17 +367,18 @@ let fclassOrder = Order.orderOn (fun (b: BindingGroupSharingSameReqdItems) -> b.
 ///   Other occurrences contribute the value gv.
 type ReqdItem =
     | ReqdSubEnv of Val
-    | ReqdVal    of Val
-    override i.ToString() =
-      match i with
-      | ReqdSubEnv f -> "&" + f.LogicalName
-      | ReqdVal    f -> f.LogicalName
+    | ReqdVal of Val
 
+    override i.ToString() =
+        match i with
+        | ReqdSubEnv f -> "&" + f.LogicalName
+        | ReqdVal f -> f.LogicalName
 
 let reqdItemOrder =
-    let rep = function
-      | ReqdSubEnv v -> struct (true, v)
-      | ReqdVal    v -> struct (false, v)
+    let rep =
+        function
+        | ReqdSubEnv v -> struct (true, v)
+        | ReqdVal v -> struct (false, v)
 
     Order.orderOn rep (Pair.order (Bool.order, valOrder))
 
@@ -339,29 +386,45 @@ let reqdItemOrder =
 /// The reqdTypars   are the free reqdTypars of the defns, and those required by any direct TLR arity-met calls.
 /// The reqdItems are the ids/subEnvs required from calls to freeVars.
 type ReqdItemsForDefn =
-    { 
+    {
         reqdTypars: Zset<Typar>
         reqdItems: Zset<ReqdItem>
         m: range
     }
 
-    member env.ReqdSubEnvs = [ for x in env.reqdItems do match x with | ReqdSubEnv f -> yield f | ReqdVal _ -> () ]
+    member env.ReqdSubEnvs =
+        [
+            for x in env.reqdItems do
+                match x with
+                | ReqdSubEnv f -> yield f
+                | ReqdVal _ -> ()
+        ]
 
-    member env.ReqdVals = [ for x in env.reqdItems do match x with | ReqdSubEnv _ -> () | ReqdVal v -> yield v ]
+    member env.ReqdVals =
+        [
+            for x in env.reqdItems do
+                match x with
+                | ReqdSubEnv _ -> ()
+                | ReqdVal v -> yield v
+        ]
 
-    member env.Extend (typars, items) =
-        {env with
-               reqdTypars = Zset.addList typars env.reqdTypars
-               reqdItems = Zset.addList items  env.reqdItems}
+    member env.Extend(typars, items) =
+        { env with
+            reqdTypars = Zset.addList typars env.reqdTypars
+            reqdItems = Zset.addList items env.reqdItems
+        }
 
     static member Initial typars m =
-        {reqdTypars = Zset.addList typars  (Zset.empty typarOrder)
-         reqdItems = Zset.empty reqdItemOrder
-         m = m }
+        {
+            reqdTypars = Zset.addList typars (Zset.empty typarOrder)
+            reqdItems = Zset.empty reqdItemOrder
+            m = m
+        }
 
     override env.ToString() =
-        (showL (commaListL (List.map typarL (Zset.elements env.reqdTypars)))) + "--" +
-        (String.concat ", " (List.map string (Zset.elements env.reqdItems)))
+        (showL (commaListL (List.map typarL (Zset.elements env.reqdTypars))))
+        + "--"
+        + (String.concat ", " (List.map string (Zset.elements env.reqdItems)))
 
 //-------------------------------------------------------------------------
 // pass2: collector - state
@@ -370,7 +433,7 @@ type ReqdItemsForDefn =
 type Generators = Zset<Val>
 
 /// check a named function value applied to sufficient arguments
-let IsArityMet (vref: ValRef)  wf (tys: TypeInst) args =
+let IsArityMet (vref: ValRef) wf (tys: TypeInst) args =
     (tys.Length = vref.Typars.Length) && (wf <= List.length args)
 
 module Pass2_DetermineReqdItems =
@@ -410,7 +473,6 @@ module Pass2_DetermineReqdItems =
     // fix up reqdTypars(-) according to direct call dependencies.
     //
 
-
     /// This state collects:
     ///   reqdItemsMap          - fclass -> env
     ///   fclassM       - f      -> fclass
@@ -432,56 +494,68 @@ module Pass2_DetermineReqdItems =
         }
 
     let state0 =
-        { stack = []
-          reqdItemsMap = Zmap.empty fclassOrder
-          fclassM = Zmap.empty valOrder
-          revDeclist = []
-          recShortCallS = Zset.empty valOrder }
+        {
+            stack = []
+            reqdItemsMap = Zmap.empty fclassOrder
+            fclassM = Zmap.empty valOrder
+            revDeclist = []
+            recShortCallS = Zset.empty valOrder
+        }
 
     /// PUSH = start collecting for fclass
     let PushFrame (fclass: BindingGroupSharingSameReqdItems) (reqdTypars0, reqdVals0, m) state =
         if fclass.IsEmpty then
             state
         else
-          {state with
-               revDeclist = fclass :: state.revDeclist
-               stack = (let env = ReqdItemsForDefn.Initial reqdTypars0 m in (fclass, reqdVals0, env) :: state.stack) }
+            { state with
+                revDeclist = fclass :: state.revDeclist
+                stack = (let env = ReqdItemsForDefn.Initial reqdTypars0 m in (fclass, reqdVals0, env) :: state.stack)
+            }
 
     /// POP & SAVE = end collecting for fclass and store
-    let SaveFrame     (fclass: BindingGroupSharingSameReqdItems) state =
-        if verboseTLR then dprintf "SaveFrame: %A\n" fclass
+    let SaveFrame (fclass: BindingGroupSharingSameReqdItems) state =
+        if verboseTLR then
+            dprintf "SaveFrame: %A\n" fclass
+
         if fclass.IsEmpty then
             state
         else
             match state.stack with
-            | []                             -> internalError "trl: popFrame has empty stack"
+            | [] -> internalError "trl: popFrame has empty stack"
             | (fclass, _reqdVals0, env) :: stack -> (* ASSERT: same fclass *)
-                {state with
-                   stack = stack
-                   reqdItemsMap = Zmap.add  fclass env   state.reqdItemsMap
-                   fclassM = List.fold (fun mp (k, v) -> Zmap.add k v mp) state.fclassM fclass.Pairs }
+                { state with
+                    stack = stack
+                    reqdItemsMap = Zmap.add fclass env state.reqdItemsMap
+                    fclassM = List.fold (fun mp (k, v) -> Zmap.add k v mp) state.fclassM fclass.Pairs
+                }
 
     /// Log requirements for gv in the relevant stack frames
     let LogRequiredFrom gv items state =
         let logIntoFrame (fclass, reqdVals0: Zset<Val>, env: ReqdItemsForDefn) =
-           let env =
-               if reqdVals0.Contains gv then
-                   env.Extend ([], items)
-               else env
+            let env = if reqdVals0.Contains gv then env.Extend([], items) else env
 
-           fclass, reqdVals0, env
+            fclass, reqdVals0, env
 
-        {state with stack = List.map logIntoFrame state.stack}
+        { state with
+            stack = List.map logIntoFrame state.stack
+        }
 
     let LogShortCall gv state =
-        if state.stack  |> List.exists (fun (fclass, _reqdVals0, _env) ->  fclass.Contains gv) then
-           if verboseTLR then dprintf "shortCall:     rec: %s\n" gv.LogicalName
-           // Have short call to gv within it's (mutual) definition(s)
-           {state with
-               recShortCallS = Zset.add gv state.recShortCallS}
+        if
+            state.stack
+            |> List.exists (fun (fclass, _reqdVals0, _env) -> fclass.Contains gv)
+        then
+            if verboseTLR then
+                dprintf "shortCall:     rec: %s\n" gv.LogicalName
+            // Have short call to gv within it's (mutual) definition(s)
+            { state with
+                recShortCallS = Zset.add gv state.recShortCallS
+            }
         else
-          if verboseTLR then dprintf "shortCall: not-rec: %s\n" gv.LogicalName
-          state
+            if verboseTLR then
+                dprintf "shortCall: not-rec: %s\n" gv.LogicalName
+
+            state
 
     let FreeInBindings bs =
         let opts = CollectTyparsAndLocalsWithStackGuard()
@@ -493,103 +567,118 @@ module Pass2_DetermineReqdItems =
     ///   "app (f, tps, args)"                             - occurrence
     ///
     /// On intercepted nodes, must recurseF fold to collect from subexpressions.
-    let ExprEnvIntercept (tlrS, arityM) recurseF noInterceptF z expr = 
+    let ExprEnvIntercept (tlrS, arityM) recurseF noInterceptF z expr =
 
-         let accInstance z (fvref: ValRef, tps, args) = 
-             let f = fvref.Deref
-             match Zmap.tryFind f arityM with
+        let accInstance z (fvref: ValRef, tps, args) =
+            let f = fvref.Deref
 
-             | Some wf ->
-                 // f is TLR with arity wf
-                 if IsArityMet fvref wf tps args then
-                     // arity-met call to a TLR g
-                     LogRequiredFrom f [ReqdSubEnv f] z
-                 else
-                     // arity-short instance
-                     let z = LogRequiredFrom f [ReqdVal f] z
-                     // LogShortCall - logs recursive short calls
-                     let z = LogShortCall f z
-                     z
+            match Zmap.tryFind f arityM with
 
-             | None    ->
-                 // f is non-TLR
-                 LogRequiredFrom f [ReqdVal f] z
+            | Some wf ->
+                // f is TLR with arity wf
+                if IsArityMet fvref wf tps args then
+                    // arity-met call to a TLR g
+                    LogRequiredFrom f [ ReqdSubEnv f ] z
+                else
+                    // arity-short instance
+                    let z = LogRequiredFrom f [ ReqdVal f ] z
+                    // LogShortCall - logs recursive short calls
+                    let z = LogShortCall f z
+                    z
 
-         let accBinds m z (binds: Bindings) =
-             let tlrBs, nonTlrBs = binds |> List.partition (fun b -> Zset.contains b.Var tlrS)
-             // For bindings marked TLR, collect implied env
-             let fclass = BindingGroupSharingSameReqdItems tlrBs
-             // what determines env?
-             let frees = FreeInBindings tlrBs
-             // put in env
-             let reqdTypars0 = frees.FreeTyvars.FreeTypars |> Zset.elements     
-             // occurrences contribute to env 
-             let reqdVals0 = frees.FreeLocals |> Zset.elements
-             // tlrBs are not reqdVals0 for themselves 
-             let reqdVals0 = reqdVals0 |> List.filter (fclass.Contains >> not) 
-             let reqdVals0 = reqdVals0 |> Zset.ofList valOrder 
-             // collect into env over bodies 
-             let z = PushFrame fclass (reqdTypars0, reqdVals0,m) z
-             let z = (z, tlrBs) ||> List.fold (foldOn (fun b -> b.Expr) recurseF) 
-             let z = SaveFrame fclass z
-             // for bindings not marked TRL, collect 
-             let z = (z, nonTlrBs) ||> List.fold (foldOn (fun b -> b.Expr) recurseF) 
-             z
+            | None ->
+                // f is non-TLR
+                LogRequiredFrom f [ ReqdVal f ] z
 
-         match expr with
-         | Expr.Val (v, _, _) -> 
-             accInstance z (v, [], [])
+        let accBinds m z (binds: Bindings) =
+            let tlrBs, nonTlrBs = binds |> List.partition (fun b -> Zset.contains b.Var tlrS)
+            // For bindings marked TLR, collect implied env
+            let fclass = BindingGroupSharingSameReqdItems tlrBs
+            // what determines env?
+            let frees = FreeInBindings tlrBs
+            // put in env
+            let reqdTypars0 = frees.FreeTyvars.FreeTypars |> Zset.elements
+            // occurrences contribute to env
+            let reqdVals0 = frees.FreeLocals |> Zset.elements
+            // tlrBs are not reqdVals0 for themselves
+            let reqdVals0 = reqdVals0 |> List.filter (fclass.Contains >> not)
+            let reqdVals0 = reqdVals0 |> Zset.ofList valOrder
+            // collect into env over bodies
+            let z = PushFrame fclass (reqdTypars0, reqdVals0, m) z
+            let z = (z, tlrBs) ||> List.fold (foldOn (fun b -> b.Expr) recurseF)
+            let z = SaveFrame fclass z
+            // for bindings not marked TRL, collect
+            let z = (z, nonTlrBs) ||> List.fold (foldOn (fun b -> b.Expr) recurseF)
+            z
 
-         | Expr.Op (TOp.LValueOp (_, v), _tys, args, _) -> 
-             let z = accInstance z (v, [], [])
-             List.fold recurseF z args
+        match expr with
+        | Expr.Val(v, _, _) -> accInstance z (v, [], [])
 
-         | Expr.App (f, fty, tys, args, m) -> 
-             let f, _fty, tys, args, _m = destApp (f, fty, tys, args, m)
-             match f with
-             | Expr.Val (f, _, _) ->
-                 // YES: APP vspec tps args - log 
-                 let z = accInstance z (f, tys, args)
-                 List.fold recurseF z args
-             | _ ->
-                 // NO: app, but function is not val - no log 
-                 noInterceptF z expr
+        | Expr.Op(TOp.LValueOp(_, v), _tys, args, _) ->
+            let z = accInstance z (v, [], [])
+            List.fold recurseF z args
 
-         | Expr.LetRec (binds, body, m, _) -> 
-             let z = accBinds m z binds
-             recurseF z body
+        | Expr.App(f, fty, tys, args, m) ->
+            let f, _fty, tys, args, _m = destApp (f, fty, tys, args, m)
 
-         | Expr.Let (bind,body,m,_) -> 
-             let z = accBinds m z [bind]
-             // tailcall for linear sequences
-             recurseF z body
+            match f with
+            | Expr.Val(f, _, _) ->
+                // YES: APP vspec tps args - log
+                let z = accInstance z (f, tys, args)
+                List.fold recurseF z args
+            | _ ->
+                // NO: app, but function is not val - no log
+                noInterceptF z expr
 
-         | _ -> 
-             noInterceptF z expr
+        | Expr.LetRec(binds, body, m, _) ->
+            let z = accBinds m z binds
+            recurseF z body
+
+        | Expr.Let(bind, body, m, _) ->
+            let z = accBinds m z [ bind ]
+            // tailcall for linear sequences
+            recurseF z body
+
+        | _ -> noInterceptF z expr
 
     /// Initially, reqdTypars(fclass) = freetps(bodies).
     /// For each direct call to a gv, a generator for fclass,
     /// Required to include the reqdTypars(gv) in reqdTypars(fclass).
     let CloseReqdTypars fclassM reqdItemsMap =
-        if verboseTLR then dprintf "CloseReqdTypars------\n"
+        if verboseTLR then
+            dprintf "CloseReqdTypars------\n"
 
         let closeStep reqdItemsMap changed fc (env: ReqdItemsForDefn) =
             let directCallReqdEnvs = env.ReqdSubEnvs
-            let directCallReqdTypars = directCallReqdEnvs |> List.map (fun f ->
-                                            let fc = Zmap.force f  fclassM ("reqdTyparsFor", nameOfVal)
-                                            let env = Zmap.force fc reqdItemsMap    ("reqdTyparsFor", string)
-                                            env.reqdTypars)
+
+            let directCallReqdTypars =
+                directCallReqdEnvs
+                |> List.map (fun f ->
+                    let fc = Zmap.force f fclassM ("reqdTyparsFor", nameOfVal)
+                    let env = Zmap.force fc reqdItemsMap ("reqdTyparsFor", string)
+                    env.reqdTypars)
 
             let reqdTypars0 = env.reqdTypars
             let reqdTypars = List.fold Zset.union reqdTypars0 directCallReqdTypars
             let changed = changed || (not (Zset.equal reqdTypars0 reqdTypars))
-            let env = {env with reqdTypars = reqdTypars}
+            let env = { env with reqdTypars = reqdTypars }
 #if DEBUG
             if verboseTLR then
-                dprintf "closeStep: fc=%30A nSubs=%d reqdTypars0=%s reqdTypars=%s\n" fc directCallReqdEnvs.Length (showTyparSet reqdTypars0) (showTyparSet reqdTypars)
-                directCallReqdEnvs |> List.iter (fun f    -> dprintf "closeStep: dcall    f=%s\n" f.LogicalName)
-                directCallReqdEnvs |> List.iter (fun f    -> dprintf "closeStep: dcall   fc=%A\n" (Zmap.find f fclassM))
-                directCallReqdTypars |> List.iter (fun _reqdTypars -> dprintf "closeStep: dcall reqdTypars=%s\n" (showTyparSet reqdTypars0))
+                dprintf
+                    "closeStep: fc=%30A nSubs=%d reqdTypars0=%s reqdTypars=%s\n"
+                    fc
+                    directCallReqdEnvs.Length
+                    (showTyparSet reqdTypars0)
+                    (showTyparSet reqdTypars)
+
+                directCallReqdEnvs
+                |> List.iter (fun f -> dprintf "closeStep: dcall    f=%s\n" f.LogicalName)
+
+                directCallReqdEnvs
+                |> List.iter (fun f -> dprintf "closeStep: dcall   fc=%A\n" (Zmap.find f fclassM))
+
+                directCallReqdTypars
+                |> List.iter (fun _reqdTypars -> dprintf "closeStep: dcall reqdTypars=%s\n" (showTyparSet reqdTypars0))
 #else
             ignore fc
 #endif
@@ -597,23 +686,29 @@ module Pass2_DetermineReqdItems =
 
         let rec fixpoint reqdItemsMap =
             let changed = false
-            let changed, reqdItemsMap = Zmap.foldMap (closeStep reqdItemsMap) changed reqdItemsMap
-            if changed then
-                fixpoint reqdItemsMap
-            else
-                reqdItemsMap
+
+            let changed, reqdItemsMap =
+                Zmap.foldMap (closeStep reqdItemsMap) changed reqdItemsMap
+
+            if changed then fixpoint reqdItemsMap else reqdItemsMap
 
         fixpoint reqdItemsMap
 
 #if DEBUG
     let DumpReqdValMap reqdItemsMap =
         for KeyValue(fc, env) in reqdItemsMap do
-            dprintf "CLASS=%A\n env=%A\n" fc  env
+            dprintf "CLASS=%A\n env=%A\n" fc env
 #endif
 
     let DetermineReqdItems (tlrS, arityM) expr =
-        if verboseTLR then dprintf "DetermineReqdItems------\n"
-        let folder = {ExprFolder0 with exprIntercept = ExprEnvIntercept (tlrS, arityM)}
+        if verboseTLR then
+            dprintf "DetermineReqdItems------\n"
+
+        let folder =
+            { ExprFolder0 with
+                exprIntercept = ExprEnvIntercept(tlrS, arityM)
+            }
+
         let z = state0
         // Walk the entire assembly
         let z = FoldImplFile folder z expr
@@ -624,7 +719,8 @@ module Pass2_DetermineReqdItems =
         let recShortCallS = z.recShortCallS
         // diagnostic dump
 #if DEBUG
-        if verboseTLR then DumpReqdValMap reqdItemsMap
+        if verboseTLR then
+            DumpReqdValMap reqdItemsMap
 #endif
         // close the reqdTypars under the subEnv reln
         let reqdItemsMap = CloseReqdTypars fclassM reqdItemsMap
@@ -635,9 +731,9 @@ module Pass2_DetermineReqdItems =
 #if DEBUG
         // diagnostic dump
         if verboseTLR then
-             DumpReqdValMap reqdItemsMap
-             declist |> List.iter (fun fc -> dprintf "Declist: %A\n" fc)
-             recShortCallS |> Zset.iter (fun f -> dprintf "RecShortCall: %s\n" f.LogicalName)
+            DumpReqdValMap reqdItemsMap
+            declist |> List.iter (fun fc -> dprintf "Declist: %A\n" fc)
+            recShortCallS |> Zset.iter (fun f -> dprintf "RecShortCall: %s\n" f.LogicalName)
 #endif
 
         reqdItemsMap, fclassM, declist, recShortCallS
@@ -663,13 +759,13 @@ type PackedReqdItems =
     {
         /// The actual typars
         ep_etps: Typars
-      
+
         /// The actual env carrier values
-        ep_aenvs: Val   list
-        
+        ep_aenvs: Val list
+
         /// Sequentially define the aenvs in terms of the fvs
         ep_pack: Bindings
-        
+
         /// Sequentially define the fvs   in terms of the aenvs
         ep_unpack: Bindings
     }
@@ -684,13 +780,11 @@ exception AbortTLR of range
 /// Chooses to pass all env values as explicit args (no tupling).
 /// Note, tupling would cause an allocation,
 /// so, unless arg lists get very long, this flat packing will be preferable.
-
 /// Given (fclass, env).
 /// Have env = ReqdVal vj, ReqdSubEnv subEnvk -- ranging over j, k
 /// Define vals(env) = {vj}|j union vals(subEnvk)|k -- trans closure of vals of env.
 /// Define <vi, aenvi> for each vi in vals(env).
 ///  This is the cmap for the env.
-
 ///  reqdTypars = env.reqdTypars
 ///  carriers = aenvi|i
 ///  pack = TBIND(aenvi = vi)            for each (aenvi, vi) in cmap
@@ -699,101 +793,129 @@ exception AbortTLR of range
 /// where
 ///   aenvFor(v) = aenvi where (v, aenvi) in cmap.
 let FlatEnvPacks g fclassM topValS declist (reqdItemsMap: Zmap<BindingGroupSharingSameReqdItems, ReqdItemsForDefn>) =
-   let fclassOf f = Zmap.force f fclassM ("fclassM", nameOfVal)
-   let packEnv carrierMaps (fc: BindingGroupSharingSameReqdItems) =
-       if verboseTLR then dprintf "\ntlr: packEnv fc=%A\n" fc
-       let env = Zmap.force fc reqdItemsMap ("packEnv", string)
+    let fclassOf f =
+        Zmap.force f fclassM ("fclassM", nameOfVal)
 
-       // carrierMaps = (fclass, (v, aenv)map)map
-       let carrierMapFor f = Zmap.force (fclassOf f) carrierMaps ("carrierMapFor", string)
-       let valsSubEnvFor f = Zmap.keys (carrierMapFor f)
+    let packEnv carrierMaps (fc: BindingGroupSharingSameReqdItems) =
+        if verboseTLR then
+            dprintf "\ntlr: packEnv fc=%A\n" fc
 
-       // determine vals(env) - transclosure
-       let vals = env.ReqdVals @ List.collect valsSubEnvFor env.ReqdSubEnvs  // list, with repeats
-       let vals = vals |> List.distinctBy (fun v -> v.Stamp)
+        let env = Zmap.force fc reqdItemsMap ("packEnv", string)
 
-       // Remove genuinely toplevel, no need to close over these
-       let vals = vals |> List.filter (IsMandatoryTopLevel >> not)
-       // Remove byrefs, no need to close over these, and would be invalid to do so since their values can change.
-       //
-       // Note that it is normally not OK to skip closing over values, since values given (method) TLR must have implementations
-       // which are truly closed. However, byref values never escape into any lambdas, so are never used in anything
-       // for which we will choose a method TLR.
-       //
-       // For example, consider this (FSharp 1.0 bug 5578):
-       //
-       //    let mutable a = 1
-       //
-       //    let result1 =
-       //        let x = &a  // This is NOT given TLR, because it is byref
-       //        x <- 111
-       //        let temp = x // This is given a static field TLR, not a method TLR
-       //        // let f () = x  // This is not allowed, can't capture x
-       //        x <- 999
-       //        temp
-       //
-       // Compare with this:
-       //    let mutable a = 1
-       //
-       //    let result2 =
-       //        let x = a  // this is given static field TLR
-       //        a <- 111
-       //        let temp = a
-       //        let f () = x  // This is not allowed, and is given a method TLR
-       //        a <- 999
-       //        temp
+        // carrierMaps = (fclass, (v, aenv)map)map
+        let carrierMapFor f =
+            Zmap.force (fclassOf f) carrierMaps ("carrierMapFor", string)
 
-       let vals = vals |> List.filter (fun v -> not (isByrefLikeTy g v.Range v.Type))
-       // Remove values which have been labelled TLR, no need to close over these
-       let vals = vals |> List.filter (Zset.memberOf topValS >> not)
+        let valsSubEnvFor f = Zmap.keys (carrierMapFor f)
 
-       // Carrier sets cannot include constrained polymorphic values. We can't just take such a value out, so for the moment
-       // we'll just abandon TLR altogether and give a warning about this condition.
-       match vals |> List.tryFind (IsGenericValWithGenericConstraints g) with
-       | None -> ()
-       | Some v -> raise (AbortTLR v.Range)
+        // determine vals(env) - transclosure
+        let vals = env.ReqdVals @ List.collect valsSubEnvFor env.ReqdSubEnvs // list, with repeats
+        let vals = vals |> List.distinctBy (fun v -> v.Stamp)
 
-       // build cmap for env
-       let cmapPairs = vals |> List.map (fun v -> (v, (mkCompGenLocal env.m v.LogicalName v.Type |> fst)))
-       let cmap = Zmap.ofList valOrder cmapPairs
-       let aenvFor     v = Zmap.force v cmap ("aenvFor", nameOfVal)
-       let aenvExprFor v = exprForVal env.m (aenvFor v)
+        // Remove genuinely toplevel, no need to close over these
+        let vals = vals |> List.filter (IsMandatoryTopLevel >> not)
+        // Remove byrefs, no need to close over these, and would be invalid to do so since their values can change.
+        //
+        // Note that it is normally not OK to skip closing over values, since values given (method) TLR must have implementations
+        // which are truly closed. However, byref values never escape into any lambdas, so are never used in anything
+        // for which we will choose a method TLR.
+        //
+        // For example, consider this (FSharp 1.0 bug 5578):
+        //
+        //    let mutable a = 1
+        //
+        //    let result1 =
+        //        let x = &a  // This is NOT given TLR, because it is byref
+        //        x <- 111
+        //        let temp = x // This is given a static field TLR, not a method TLR
+        //        // let f () = x  // This is not allowed, can't capture x
+        //        x <- 999
+        //        temp
+        //
+        // Compare with this:
+        //    let mutable a = 1
+        //
+        //    let result2 =
+        //        let x = a  // this is given static field TLR
+        //        a <- 111
+        //        let temp = a
+        //        let f () = x  // This is not allowed, and is given a method TLR
+        //        a <- 999
+        //        temp
 
-       // build PackedReqdItems
-       let reqdTypars = env.reqdTypars
-       let aenvs = Zmap.values cmap
-       let pack = cmapPairs |> List.map (fun (v, aenv) -> mkInvisibleBind aenv (exprForVal env.m v))
-       let unpack =
-           let unpackCarrier (v, aenv) = mkInvisibleBind (ClearValReprInfo v) (exprForVal env.m aenv)
-           let unpackSubenv f =
-               let subCMap = carrierMapFor f
-               let vaenvs = Zmap.toList subCMap
-               vaenvs |> List.map (fun (subv, subaenv) -> mkBind DebugPointAtBinding.NoneAtInvisible subaenv (aenvExprFor subv))
-           List.map unpackCarrier (Zmap.toList cmap) @
-           List.collect unpackSubenv env.ReqdSubEnvs
+        let vals = vals |> List.filter (fun v -> not (isByrefLikeTy g v.Range v.Type))
+        // Remove values which have been labelled TLR, no need to close over these
+        let vals = vals |> List.filter (Zset.memberOf topValS >> not)
 
-       // extend carrierMaps
-       let carrierMaps = Zmap.add fc cmap carrierMaps
+        // Carrier sets cannot include constrained polymorphic values. We can't just take such a value out, so for the moment
+        // we'll just abandon TLR altogether and give a warning about this condition.
+        match vals |> List.tryFind (IsGenericValWithGenericConstraints g) with
+        | None -> ()
+        | Some v -> raise (AbortTLR v.Range)
 
-       // dump
-       if verboseTLR then
-           dprintf "tlr: packEnv envVals =%s\n" (showL (listL valL env.ReqdVals))
-           dprintf "tlr: packEnv envSubs =%s\n" (showL (listL valL env.ReqdSubEnvs))
-           dprintf "tlr: packEnv vals =%s\n" (showL (listL valL vals))
-           dprintf "tlr: packEnv aenvs =%s\n" (showL (listL valL aenvs))
-           dprintf "tlr: packEnv pack =%s\n" (showL (listL bindingL pack))
-           dprintf "tlr: packEnv unpack =%s\n" (showL (listL bindingL unpack))
+        // build cmap for env
+        let cmapPairs =
+            vals
+            |> List.map (fun v -> (v, (mkCompGenLocal env.m v.LogicalName v.Type |> fst)))
 
-       // result
-       (fc, { ep_etps = Zset.elements reqdTypars
-              ep_aenvs = aenvs
-              ep_pack = pack
-              ep_unpack = unpack}), carrierMaps
+        let cmap = Zmap.ofList valOrder cmapPairs
 
-   let carriedMaps = Zmap.empty fclassOrder
-   let envPacks, _carriedMaps = List.mapFold packEnv carriedMaps declist   (* List.mapFold in dec order *)
-   let envPacks = Zmap.ofList fclassOrder envPacks
-   envPacks
+        let aenvFor v =
+            Zmap.force v cmap ("aenvFor", nameOfVal)
+
+        let aenvExprFor v = exprForVal env.m (aenvFor v)
+
+        // build PackedReqdItems
+        let reqdTypars = env.reqdTypars
+        let aenvs = Zmap.values cmap
+
+        let pack =
+            cmapPairs
+            |> List.map (fun (v, aenv) -> mkInvisibleBind aenv (exprForVal env.m v))
+
+        let unpack =
+            let unpackCarrier (v, aenv) =
+                mkInvisibleBind (ClearValReprInfo v) (exprForVal env.m aenv)
+
+            let unpackSubenv f =
+                let subCMap = carrierMapFor f
+                let vaenvs = Zmap.toList subCMap
+
+                vaenvs
+                |> List.map (fun (subv, subaenv) -> mkBind DebugPointAtBinding.NoneAtInvisible subaenv (aenvExprFor subv))
+
+            List.map unpackCarrier (Zmap.toList cmap)
+            @ List.collect unpackSubenv env.ReqdSubEnvs
+
+        // extend carrierMaps
+        let carrierMaps = Zmap.add fc cmap carrierMaps
+
+        // dump
+        if verboseTLR then
+            dprintf "tlr: packEnv envVals =%s\n" (showL (listL valL env.ReqdVals))
+            dprintf "tlr: packEnv envSubs =%s\n" (showL (listL valL env.ReqdSubEnvs))
+            dprintf "tlr: packEnv vals =%s\n" (showL (listL valL vals))
+            dprintf "tlr: packEnv aenvs =%s\n" (showL (listL valL aenvs))
+            dprintf "tlr: packEnv pack =%s\n" (showL (listL bindingL pack))
+            dprintf "tlr: packEnv unpack =%s\n" (showL (listL bindingL unpack))
+
+        // result
+        (fc,
+         {
+             ep_etps = Zset.elements reqdTypars
+             ep_aenvs = aenvs
+             ep_pack = pack
+             ep_unpack = unpack
+         }),
+        carrierMaps
+
+    let carriedMaps = Zmap.empty fclassOrder
+
+    let envPacks, _carriedMaps =
+        List.mapFold packEnv carriedMaps declist (* List.mapFold in dec order *)
+
+    let envPacks = Zmap.ofList fclassOrder envPacks
+    envPacks
 
 //-------------------------------------------------------------------------
 // step3: chooseEnvPacks
@@ -807,9 +929,11 @@ let FlatEnvPacks g fclassM topValS declist (reqdItemsMap: Zmap<BindingGroupShari
 /// Scope for optimization env packing here.
 /// For now, pass all environments via arguments since aiming to eliminate allocations.
 /// Later, package as tuples if arg lists get too long.
-let ChooseReqdItemPackings g fclassM topValS  declist reqdItemsMap =
-    if verboseTLR then dprintf "ChooseReqdItemPackings------\n"
-    let envPackM = FlatEnvPacks g fclassM topValS  declist reqdItemsMap
+let ChooseReqdItemPackings g fclassM topValS declist reqdItemsMap =
+    if verboseTLR then
+        dprintf "ChooseReqdItemPackings------\n"
+
+    let envPackM = FlatEnvPacks g fclassM topValS declist reqdItemsMap
     envPackM
 
 //-------------------------------------------------------------------------
@@ -818,7 +942,8 @@ let ChooseReqdItemPackings g fclassM topValS  declist reqdItemsMap =
 
 /// arity info where nothing is untupled
 // REVIEW: could do better here by preserving names
-let MakeSimpleArityInfo tps n = ValReprInfo (ValReprInfo.InferTyparInfo tps, List.replicate n ValReprInfo.unnamedTopArg, ValReprInfo.unnamedRetVal)
+let MakeSimpleArityInfo tps n =
+    ValReprInfo(ValReprInfo.InferTyparInfo tps, List.replicate n ValReprInfo.unnamedTopArg, ValReprInfo.unnamedRetVal)
 
 let CreateNewValuesForTLR g tlrS arityM fclassM envPackM =
 
@@ -840,10 +965,12 @@ let CreateNewValuesForTLR g tlrS arityM fclassM envPackM =
 
         let fHatName =
             // Ensure that we have an g.CompilerGlobalState
-            assert(g.CompilerGlobalState |> Option.isSome)
+            assert (g.CompilerGlobalState |> Option.isSome)
             g.CompilerGlobalState.Value.NiceNameGenerator.FreshCompilerGeneratedName(name, m)
 
-        let fHat = mkLocalNameTypeArity f.IsCompilerGenerated m fHatName fHatTy (Some fHatArity)
+        let fHat =
+            mkLocalNameTypeArity f.IsCompilerGenerated m fHatName fHatTy (Some fHatArity)
+
         fHat
 
     let fs = Zset.elements tlrS
@@ -859,24 +986,28 @@ module Pass4_RewriteAssembly =
 
     [<NoEquality; NoComparison>]
     type RewriteContext =
-       { ccu: CcuThunk
-         g: TcGlobals
-         stackGuard: StackGuard
-         tlrS: Zset<Val>
-         topValS: Zset<Val>
-         arityM: Zmap<Val, int>
-         fclassM: Zmap<Val, BindingGroupSharingSameReqdItems>
-         recShortCallS: Zset<Val>
-         envPackM: Zmap<BindingGroupSharingSameReqdItems, PackedReqdItems>
-         /// The mapping from 'f' values to 'fHat' values
-         fHatM: Zmap<Val, Val>
-       }
+        {
+            ccu: CcuThunk
+            g: TcGlobals
+            stackGuard: StackGuard
+            tlrS: Zset<Val>
+            topValS: Zset<Val>
+            arityM: Zmap<Val, int>
+            fclassM: Zmap<Val, BindingGroupSharingSameReqdItems>
+            recShortCallS: Zset<Val>
+            envPackM: Zmap<BindingGroupSharingSameReqdItems, PackedReqdItems>
+            /// The mapping from 'f' values to 'fHat' values
+            fHatM: Zmap<Val, Val>
+        }
 
     //-------------------------------------------------------------------------
     // pass4: rwstate (z state)
     //-------------------------------------------------------------------------
 
-    type IsRecursive = IsRec | NotRec
+    type IsRecursive =
+        | IsRec
+        | NotRec
+
     type LiftedDeclaration = IsRecursive * Bindings (* where bool=true if letrec *)
 
     /// This state is related to lifting to top-level (which is actually disabled right now)
@@ -891,63 +1022,83 @@ module Pass4_RewriteAssembly =
     /// Any TLR repr bindings under lambdas can be filtered out (and collected),
     /// giving pre-declarations to insert before the outermost lambda expr.
     type RewriteState =
-        { rws_shouldinline: bool
-          /// counts level of enclosing "lambdas"
-          rws_innerLevel: int
-          /// collected preDecs (fringe is in-order)
-          rws_preDecs: Tree<LiftedDeclaration>
+        {
+            rws_shouldinline: bool
+            /// counts level of enclosing "lambdas"
+            rws_innerLevel: int
+            /// collected preDecs (fringe is in-order)
+            rws_preDecs: Tree<LiftedDeclaration>
         }
 
-    let rewriteState0 = {rws_shouldinline=false;rws_innerLevel=0;rws_preDecs=emptyTR}
+    let rewriteState0 =
+        {
+            rws_shouldinline = false
+            rws_innerLevel = 0
+            rws_preDecs = emptyTR
+        }
 
     // move in/out of lambdas (or lambda containing construct)
-    let EnterInner z = {z with rws_innerLevel = z.rws_innerLevel + 1}
+    let EnterInner z =
+        { z with
+            rws_innerLevel = z.rws_innerLevel + 1
+        }
 
-    let ExitInner  z = {z with rws_innerLevel = z.rws_innerLevel - 1}
+    let ExitInner z =
+        { z with
+            rws_innerLevel = z.rws_innerLevel - 1
+        }
 
     let EnterShouldInline b z f =
         let orig = z.rws_shouldinline
-        let x, z' = f (if b then {z with rws_shouldinline = true } else z)
-        {z' with rws_shouldinline = orig }, x
+        let x, z' = f (if b then { z with rws_shouldinline = true } else z)
+        { z' with rws_shouldinline = orig }, x
 
     /// extract PreDecs (iff at top-level)
     let ExtractPreDecs z =
         // If level=0, so at top-level, then pop decs,
         // else keep until get back to a top-level point.
-        if z.rws_innerLevel=0 then
-          // at top-level, extract preDecs
-          let preDecs = fringeTR z.rws_preDecs
-          preDecs, {z with rws_preDecs=emptyTR}
+        if z.rws_innerLevel = 0 then
+            // at top-level, extract preDecs
+            let preDecs = fringeTR z.rws_preDecs
+            preDecs, { z with rws_preDecs = emptyTR }
         else
-          // not yet top-level, keep decs
-          [], z
+            // not yet top-level, keep decs
+            [], z
 
     /// pop and set preDecs  as "LiftedDeclaration tree"
-    let PopPreDecs z = {z with rws_preDecs=emptyTR}, z.rws_preDecs
+    let PopPreDecs z =
+        { z with rws_preDecs = emptyTR }, z.rws_preDecs
 
-    let SetPreDecs z pdt = {z with rws_preDecs=pdt}
+    let SetPreDecs z pdt = { z with rws_preDecs = pdt }
 
     /// collect Top* repr bindings - if needed...
-    let LiftTopBinds _isRec _penv z binds =
-        z, binds
+    let LiftTopBinds _isRec _penv z binds = z, binds
 
     /// Wrap preDecs (in order) over an expr - use letrec/let as approp
-    let MakePreDec  m (isRec, binds: Bindings) expr =
-        if isRec=IsRec then
+    let MakePreDec m (isRec, binds: Bindings) expr =
+        if isRec = IsRec then
             // By definition top level bindings don't refer to non-top level bindings, so we can build them in two parts
-            let topLevelBinds, nonTopLevelBinds = binds |> List.partition (fun bind -> bind.Var.IsCompiledAsTopLevel)
+            let topLevelBinds, nonTopLevelBinds =
+                binds |> List.partition (fun bind -> bind.Var.IsCompiledAsTopLevel)
+
             mkLetRecBinds m topLevelBinds (mkLetRecBinds m nonTopLevelBinds expr)
         else
-            mkLetsFromBindings  m binds expr
+            mkLetsFromBindings m binds expr
 
     /// Must MakePreDecs around every construct that could do EnterInner (which filters TLR decs).
     /// i.e. let, letrec (bind may...), ilobj, lambda, tlambda.
-    let MakePreDecs m preDecs expr = List.foldBack (MakePreDec m) preDecs expr
+    let MakePreDecs m preDecs expr =
+        List.foldBack (MakePreDec m) preDecs expr
 
     let RecursivePreDecs pdsA pdsB =
-        let pds = fringeTR (TreeNode[pdsA;pdsB])
+        let pds =
+            fringeTR (
+                TreeNode[pdsA
+                         pdsB]
+            )
+
         let decs = pds |> List.collect snd
-        LeafNode (IsRec, decs)
+        LeafNode(IsRec, decs)
 
     //-------------------------------------------------------------------------
     // pass4: lowertop - convert_vterm_bind on TopLevel binds
@@ -955,8 +1106,8 @@ module Pass4_RewriteAssembly =
 
     let AdjustBindToValRepr g (TBind(v, repr, _)) =
         match v.ValReprInfo with
-        | None -> 
-            v.SetValReprInfo (Some (InferValReprInfoOfBinding g AllowTypeDirectedDetupling.Yes v repr ))
+        | None ->
+            v.SetValReprInfo(Some(InferValReprInfoOfBinding g AllowTypeDirectedDetupling.Yes v repr))
             // Things that don't have an arity from type inference but are top-level are compiler-generated
             v.SetIsCompilerGenerated(true)
         | Some _ -> ()
@@ -972,72 +1123,88 @@ module Pass4_RewriteAssembly =
     //   let fHat<tps> f_freeVars vss = f_body[<f_freeTypars>, f_freeVars]
     let TransTLRBindings penv (binds: Bindings) =
         let g = penv.g
-        if isNil binds then [], [] else
-        let fc = BindingGroupSharingSameReqdItems binds
-        let envp = Zmap.force fc penv.envPackM ("TransTLRBindings", string)
 
-        let fRebinding (TBind(fOrig, body, letSeqPtOpt)) =
-            let m = fOrig.Range
-            let tps, vss, _b, bodyTy = stripTopLambda (body, fOrig.Type)
-            let aenvExprs = envp.ep_aenvs |> List.map (exprForVal m)
-            let vsExprs = vss |> List.map (mkRefTupledVars penv.g m)
-            let fHat = Zmap.force fOrig penv.fHatM ("fRebinding", nameOfVal)
+        if isNil binds then
+            [], []
+        else
+            let fc = BindingGroupSharingSameReqdItems binds
+            let envp = Zmap.force fc penv.envPackM ("TransTLRBindings", string)
 
-            // REVIEW: is this mutation really, really necessary? 
-            // Why are we applying TLR if the thing already has an arity? 
-            let fOrig = ClearValReprInfo fOrig
+            let fRebinding (TBind(fOrig, body, letSeqPtOpt)) =
+                let m = fOrig.Range
+                let tps, vss, _b, bodyTy = stripTopLambda (body, fOrig.Type)
+                let aenvExprs = envp.ep_aenvs |> List.map (exprForVal m)
+                let vsExprs = vss |> List.map (mkRefTupledVars penv.g m)
+                let fHat = Zmap.force fOrig penv.fHatM ("fRebinding", nameOfVal)
 
-            let fBind =
-                 mkMultiLambdaBind g fOrig letSeqPtOpt m tps vss
-                     (mkApps penv.g
-                         ((exprForVal m fHat, fHat.Type),
-                          [List.map mkTyparTy (envp.ep_etps @ tps)],
-                          aenvExprs @ vsExprs, m), bodyTy)
-            fBind
+                // REVIEW: is this mutation really, really necessary?
+                // Why are we applying TLR if the thing already has an arity?
+                let fOrig = ClearValReprInfo fOrig
 
-        let fHatNewBinding (shortRecBinds: Bindings) (TBind(f, b, letSeqPtOpt)) =
-            let wf = Zmap.force f penv.arityM ("fHatNewBinding - arityM", nameOfVal)
-            let fHat = Zmap.force f penv.fHatM  ("fHatNewBinding - fHatM", nameOfVal)
+                let fBind =
+                    mkMultiLambdaBind
+                        g
+                        fOrig
+                        letSeqPtOpt
+                        m
+                        tps
+                        vss
+                        (mkApps penv.g ((exprForVal m fHat, fHat.Type), [ List.map mkTyparTy (envp.ep_etps @ tps) ], aenvExprs @ vsExprs, m),
+                         bodyTy)
 
-            // Take off the variables
-            let tps, vss, body, bodyTy = stripTopLambda (b, f.Type)
+                fBind
 
-            // Don't take all the variables - only up to length wf
-            let vssTake, vssDrop = List.splitAt wf vss
+            let fHatNewBinding (shortRecBinds: Bindings) (TBind(f, b, letSeqPtOpt)) =
+                let wf = Zmap.force f penv.arityM ("fHatNewBinding - arityM", nameOfVal)
+                let fHat = Zmap.force f penv.fHatM ("fHatNewBinding - fHatM", nameOfVal)
 
-            // Put the untaken variables back on
-            let body, bodyTy = mkMultiLambdasCore g body.Range vssDrop (body, bodyTy)
+                // Take off the variables
+                let tps, vss, body, bodyTy = stripTopLambda (b, f.Type)
 
-            // fHat, args
-            let m = fHat.Range
+                // Don't take all the variables - only up to length wf
+                let vssTake, vssDrop = List.splitAt wf vss
 
-            // Add the type variables to the front
-            let fHat_tps = envp.ep_etps @ tps
+                // Put the untaken variables back on
+                let body, bodyTy = mkMultiLambdasCore g body.Range vssDrop (body, bodyTy)
 
-            // Add the 'aenv' and original taken variables to the front
-            let fHat_args = List.map List.singleton envp.ep_aenvs @ vssTake
-            let fHat_body = mkLetsFromBindings m envp.ep_unpack body
-            let fHat_body = mkLetsFromBindings m shortRecBinds  fHat_body  // bind "f" if have short recursive calls (somewhere)
+                // fHat, args
+                let m = fHat.Range
 
-            // fHat binding, f rebinding
-            let fHatBind = mkMultiLambdaBind g fHat letSeqPtOpt m fHat_tps fHat_args (fHat_body, bodyTy)
-            fHatBind
+                // Add the type variables to the front
+                let fHat_tps = envp.ep_etps @ tps
 
-        let rebinds = binds |> List.map fRebinding
-        let shortRecBinds = rebinds |> List.filter (fun b -> penv.recShortCallS.Contains(b.Var))
-        let newBinds = binds |> List.map (fHatNewBinding shortRecBinds)
-        newBinds, rebinds
+                // Add the 'aenv' and original taken variables to the front
+                let fHat_args = List.map List.singleton envp.ep_aenvs @ vssTake
+                let fHat_body = mkLetsFromBindings m envp.ep_unpack body
+                let fHat_body = mkLetsFromBindings m shortRecBinds fHat_body // bind "f" if have short recursive calls (somewhere)
+
+                // fHat binding, f rebinding
+                let fHatBind =
+                    mkMultiLambdaBind g fHat letSeqPtOpt m fHat_tps fHat_args (fHat_body, bodyTy)
+
+                fHatBind
+
+            let rebinds = binds |> List.map fRebinding
+
+            let shortRecBinds =
+                rebinds |> List.filter (fun b -> penv.recShortCallS.Contains(b.Var))
+
+            let newBinds = binds |> List.map (fHatNewBinding shortRecBinds)
+            newBinds, rebinds
 
     let GetAEnvBindings penv fc =
         match Zmap.tryFind fc penv.envPackM with
-        | None      -> []           // no env for this mutual binding
+        | None -> [] // no env for this mutual binding
         | Some envp -> envp.ep_pack // environment pack bindings
 
     let forceTopBindToHaveArity penv (bind: Binding) =
-        if penv.topValS.Contains(bind.Var) then AdjustBindToValRepr penv.g bind
+        if penv.topValS.Contains(bind.Var) then
+            AdjustBindToValRepr penv.g bind
 
     let TransBindings xisRec penv (binds: Bindings) =
-        let tlrBs, nonTlrBs = binds |> List.partition (fun b -> Zset.contains b.Var penv.tlrS)
+        let tlrBs, nonTlrBs =
+            binds |> List.partition (fun b -> Zset.contains b.Var penv.tlrS)
+
         let fclass = BindingGroupSharingSameReqdItems tlrBs
 
         // Trans each TLR f binding into fHat and f rebind
@@ -1051,7 +1218,7 @@ module Pass4_RewriteAssembly =
         // Assemble into replacement bindings
         let bindAs, rebinds =
             match xisRec with
-            | IsRec  -> newTlrBinds @ tlrRebinds @ nonTlrBs @ aenvBinds, []  // note: aenv last, order matters in letrec!
+            | IsRec -> newTlrBinds @ tlrRebinds @ nonTlrBs @ aenvBinds, [] // note: aenv last, order matters in letrec!
             | NotRec -> aenvBinds @ newTlrBinds, tlrRebinds @ nonTlrBs // note: aenv go first, they may be used
 
         bindAs, rebinds
@@ -1064,24 +1231,29 @@ module Pass4_RewriteAssembly =
         // Is it a val app, where the val f is TLR with arity wf?
         // CLEANUP NOTE: should be using a mkApps to make all applications
         match fx with
-        | Expr.Val (fvref: ValRef, _, vm) when
-                (Zset.contains fvref.Deref penv.tlrS) &&
-                (let wf = Zmap.force fvref.Deref penv.arityM ("TransApp - wf", nameOfVal)
-                 IsArityMet fvref wf tys args) ->
+        | Expr.Val(fvref: ValRef, _, vm) when
+            (Zset.contains fvref.Deref penv.tlrS)
+            && (let wf = Zmap.force fvref.Deref penv.arityM ("TransApp - wf", nameOfVal)
+                IsArityMet fvref wf tys args)
+            ->
 
-                   let f = fvref.Deref
-                   (* replace by direct call to corresponding fHat (and additional closure args) *)
-                   let fc = Zmap.force f  penv.fclassM ("TransApp - fc", nameOfVal)
-                   let envp = Zmap.force fc penv.envPackM ("TransApp - envp", string)
-                   let fHat = Zmap.force f  penv.fHatM ("TransApp - fHat", nameOfVal)
-                   let tys = (List.map mkTyparTy envp.ep_etps) @ tys
-                   let aenvExprs = List.map (exprForVal vm) envp.ep_aenvs
-                   let args = aenvExprs @ args
-                   mkApps penv.g ((exprForVal vm fHat, fHat.Type), [tys], args, m) (* change, direct fHat call with closure (reqdTypars, aenvs) *)
+            let f = fvref.Deref
+            (* replace by direct call to corresponding fHat (and additional closure args) *)
+            let fc = Zmap.force f penv.fclassM ("TransApp - fc", nameOfVal)
+            let envp = Zmap.force fc penv.envPackM ("TransApp - envp", string)
+            let fHat = Zmap.force f penv.fHatM ("TransApp - fHat", nameOfVal)
+            let tys = (List.map mkTyparTy envp.ep_etps) @ tys
+            let aenvExprs = List.map (exprForVal vm) envp.ep_aenvs
+            let args = aenvExprs @ args
+
+            mkApps
+                penv.g
+                ((exprForVal vm fHat, fHat.Type), [ tys ], args, m) (* change, direct fHat call with closure (reqdTypars, aenvs) *)
         | _ ->
             if isNil tys && isNil args then
                 fx
-            else Expr.App (fx, fty, tys, args, m)
+            else
+                Expr.App(fx, fty, tys, args, m)
 
     //-------------------------------------------------------------------------
     // pass4: pass (over expr)
@@ -1091,174 +1263,189 @@ module Pass4_RewriteAssembly =
     /// At applications, fixup calls  if they are arity-met instances of TLR.
     /// At free vals, fixup 0-call if it is an arity-met constant.
     /// Other cases rewrite structurally.
-    let rec TransExpr (penv: RewriteContext) (z: RewriteState) expr: Expr * RewriteState =
-        penv.stackGuard.Guard <| fun () ->
+    let rec TransExpr (penv: RewriteContext) (z: RewriteState) expr : Expr * RewriteState =
+        penv.stackGuard.Guard
+        <| fun () ->
 
-        match expr with
-        // Use TransLinearExpr with a rebuild-continuation for some forms to avoid stack overflows on large terms 
-        | LinearOpExpr _
-        | LinearMatchExpr _ 
-        | Expr.LetRec _ // note, Expr.LetRec not normally considered linear, but keeping it here as it's always been here
-        | Expr.Let    _ 
-        | Expr.DebugPoint _
-        | Expr.Sequential _ -> 
-             TransLinearExpr penv z expr id
+            match expr with
+            // Use TransLinearExpr with a rebuild-continuation for some forms to avoid stack overflows on large terms
+            | LinearOpExpr _
+            | LinearMatchExpr _
+            | Expr.LetRec _ // note, Expr.LetRec not normally considered linear, but keeping it here as it's always been here
+            | Expr.Let _
+            | Expr.DebugPoint _
+            | Expr.Sequential _ -> TransLinearExpr penv z expr id
 
-        // app - call sites may require z.
-        //     - match the app (collapsing reclinks and type instances).
-        //     - patch it.
-        | Expr.App (f, fty, tys, args, m) ->
-           // pass over f, args subexprs
-           let f, z = TransExpr penv z f
-           let args, z = List.mapFold (TransExpr penv) z args
-           // match app, and fixup if needed
-           let f, fty, tys, args, m = destApp (f, fty, tys, args, m)
-           let expr = TransApp penv (f, fty, tys, args, m)
-           expr, z
+            // app - call sites may require z.
+            //     - match the app (collapsing reclinks and type instances).
+            //     - patch it.
+            | Expr.App(f, fty, tys, args, m) ->
+                // pass over f, args subexprs
+                let f, z = TransExpr penv z f
+                let args, z = List.mapFold (TransExpr penv) z args
+                // match app, and fixup if needed
+                let f, fty, tys, args, m = destApp (f, fty, tys, args, m)
+                let expr = TransApp penv (f, fty, tys, args, m)
+                expr, z
 
-        | Expr.Val (v, _, m) ->
-           // consider this a trivial app
-           let fx, fty = expr, v.Type
-           let expr = TransApp penv (fx, fty, [], [], m)
-           expr, z
+            | Expr.Val(v, _, m) ->
+                // consider this a trivial app
+                let fx, fty = expr, v.Type
+                let expr = TransApp penv (fx, fty, [], [], m)
+                expr, z
 
-        // reclink - suppress
-        | Expr.Link r ->
-            TransExpr penv z r.Value
+            // reclink - suppress
+            | Expr.Link r -> TransExpr penv z r.Value
 
-        // ilobj - has implicit lambda exprs and recursive/base references
-        | Expr.Obj (_, ty, basev, basecall, overrides, iimpls, m) ->
-            let basecall, z = TransExpr penv z basecall
-            let overrides, z = List.mapFold (TransMethod penv) z overrides
-            let iimpls, z =
-                (z, iimpls) ||> List.mapFold (fun z (tType, objExprs) ->
-                    let objExprs', z' = List.mapFold (TransMethod penv) z objExprs
-                    (tType, objExprs'), z') 
-            let expr = Expr.Obj (newUnique(), ty, basev, basecall, overrides, iimpls, m)
-            let pds, z = ExtractPreDecs z
-            MakePreDecs m pds expr, z (* if TopLevel, lift preDecs over the ilobj expr *)
+            // ilobj - has implicit lambda exprs and recursive/base references
+            | Expr.Obj(_, ty, basev, basecall, overrides, iimpls, m) ->
+                let basecall, z = TransExpr penv z basecall
+                let overrides, z = List.mapFold (TransMethod penv) z overrides
 
-        // lambda, tlambda - explicit lambda terms
-        | Expr.Lambda (_, ctorThisValOpt, baseValOpt, argvs, body, m, bodyTy) ->
-            let z = EnterInner z
-            let body, z = TransExpr penv z body
-            let z = ExitInner z
-            let pds, z = ExtractPreDecs z
-            MakePreDecs m pds (rebuildLambda m ctorThisValOpt baseValOpt argvs (body, bodyTy)), z
+                let iimpls, z =
+                    (z, iimpls)
+                    ||> List.mapFold (fun z (tType, objExprs) ->
+                        let objExprs', z' = List.mapFold (TransMethod penv) z objExprs
+                        (tType, objExprs'), z')
 
-        | Expr.TyLambda (_, tps, body, m, bodyTy) ->
-            let z = EnterInner z
-            let body, z = TransExpr penv z body
-            let z = ExitInner z
-            let pds, z = ExtractPreDecs z
-            MakePreDecs m pds (mkTypeLambda m tps (body, bodyTy)), z
+                let expr = Expr.Obj(newUnique (), ty, basev, basecall, overrides, iimpls, m)
+                let pds, z = ExtractPreDecs z
+                MakePreDecs m pds expr, z (* if TopLevel, lift preDecs over the ilobj expr *)
 
-        // Lifting TLR out over constructs (disabled)
-        // Lift minimally to ensure the defn is not lifted up and over defns on which it depends (disabled)
-        | Expr.Match (spBind, mExpr, dtree, targets, m, ty) ->
-            let targets = Array.toList targets
-            let dtree, z = TransDecisionTree penv z dtree
-            let targets, z = List.mapFold (TransDecisionTreeTarget penv) z targets
-            // TransDecisionTreeTarget wraps EnterInner/exitInner, so need to collect any top decs 
-            let pds,z = ExtractPreDecs z
-            MakePreDecs m pds (mkAndSimplifyMatch spBind mExpr m ty dtree targets), z
+            // lambda, tlambda - explicit lambda terms
+            | Expr.Lambda(_, ctorThisValOpt, baseValOpt, argvs, body, m, bodyTy) ->
+                let z = EnterInner z
+                let body, z = TransExpr penv z body
+                let z = ExitInner z
+                let pds, z = ExtractPreDecs z
+                MakePreDecs m pds (rebuildLambda m ctorThisValOpt baseValOpt argvs (body, bodyTy)), z
 
-        // all others - below - rewrite structurally - so boiler plate code after this point... 
-        | Expr.Const _ -> 
-            expr,z 
+            | Expr.TyLambda(_, tps, body, m, bodyTy) ->
+                let z = EnterInner z
+                let body, z = TransExpr penv z body
+                let z = ExitInner z
+                let pds, z = ExtractPreDecs z
+                MakePreDecs m pds (mkTypeLambda m tps (body, bodyTy)), z
 
-        | Expr.Quote (a,dataCell,isFromQueryExpression,m,ty) -> 
-            let doData (typeDefs,argTypes,argExprs,data) z = 
-                let argExprs,z = List.mapFold (TransExpr penv) z argExprs
-                (typeDefs,argTypes,argExprs,data), z
+            // Lifting TLR out over constructs (disabled)
+            // Lift minimally to ensure the defn is not lifted up and over defns on which it depends (disabled)
+            | Expr.Match(spBind, mExpr, dtree, targets, m, ty) ->
+                let targets = Array.toList targets
+                let dtree, z = TransDecisionTree penv z dtree
+                let targets, z = List.mapFold (TransDecisionTreeTarget penv) z targets
+                // TransDecisionTreeTarget wraps EnterInner/exitInner, so need to collect any top decs
+                let pds, z = ExtractPreDecs z
+                MakePreDecs m pds (mkAndSimplifyMatch spBind mExpr m ty dtree targets), z
 
-            let data, z =
-                match dataCell.Value with 
-                | Some (data1, data2) ->
-                   let data1, z = doData data1 z
-                   let data2, z = doData data2 z
-                   Some (data1, data2), z
-                | None -> None, z
+            // all others - below - rewrite structurally - so boiler plate code after this point...
+            | Expr.Const _ -> expr, z
 
-            Expr.Quote (a,ref data,isFromQueryExpression,m,ty),z
+            | Expr.Quote(a, dataCell, isFromQueryExpression, m, ty) ->
+                let doData (typeDefs, argTypes, argExprs, data) z =
+                    let argExprs, z = List.mapFold (TransExpr penv) z argExprs
+                    (typeDefs, argTypes, argExprs, data), z
 
-        | Expr.Op (c,tyargs,args,m) -> 
-            let args,z = List.mapFold (TransExpr penv) z args
-            Expr.Op (c,tyargs,args,m),z
+                let data, z =
+                    match dataCell.Value with
+                    | Some(data1, data2) ->
+                        let data1, z = doData data1 z
+                        let data2, z = doData data2 z
+                        Some(data1, data2), z
+                    | None -> None, z
 
-        | Expr.StaticOptimization (constraints,e2,e3,m) ->
-            let e2,z = TransExpr penv z e2
-            let e3,z = TransExpr penv z e3
-            Expr.StaticOptimization (constraints,e2,e3,m),z
+                Expr.Quote(a, ref data, isFromQueryExpression, m, ty), z
 
-        | Expr.TyChoose (_,_,m) -> 
-            error(Error(FSComp.SR.tlrUnexpectedTExpr(),m))
+            | Expr.Op(c, tyargs, args, m) ->
+                let args, z = List.mapFold (TransExpr penv) z args
+                Expr.Op(c, tyargs, args, m), z
 
-        | Expr.WitnessArg (_witnessInfo, _m) ->
-            expr, z
+            | Expr.StaticOptimization(constraints, e2, e3, m) ->
+                let e2, z = TransExpr penv z e2
+                let e3, z = TransExpr penv z e3
+                Expr.StaticOptimization(constraints, e2, e3, m), z
 
-    /// Walk over linear structured terms in tail-recursive loop, using a continuation 
-    /// to represent the rebuild-the-term stack 
+            | Expr.TyChoose(_, _, m) -> error (Error(FSComp.SR.tlrUnexpectedTExpr (), m))
+
+            | Expr.WitnessArg(_witnessInfo, _m) -> expr, z
+
+    /// Walk over linear structured terms in tail-recursive loop, using a continuation
+    /// to represent the rebuild-the-term stack
     and TransLinearExpr penv z expr (contf: Expr * RewriteState -> Expr * RewriteState) =
         match expr with
-        | Expr.Sequential (e1, e2, dir, m) ->
+        | Expr.Sequential(e1, e2, dir, m) ->
             let e1, z = TransExpr penv z e1
-            TransLinearExpr penv z e2 (contf << (fun (e2, z) ->
-                Expr.Sequential (e1, e2, dir, m), z))
+            TransLinearExpr penv z e2 (contf << (fun (e2, z) -> Expr.Sequential(e1, e2, dir, m), z))
 
-        | Expr.DebugPoint (dpm, innerExpr) ->
-            TransLinearExpr penv z innerExpr (contf << (fun (innerExprR, z) ->
-                Expr.DebugPoint (dpm, innerExprR), z))
+        | Expr.DebugPoint(dpm, innerExpr) ->
+            TransLinearExpr penv z innerExpr (contf << (fun (innerExprR, z) -> Expr.DebugPoint(dpm, innerExprR), z))
 
-         // letrec - pass_recbinds does the work
-         | Expr.LetRec (binds, e, m, _) ->
-             let z = EnterInner z
-             // For letrec, preDecs from RHS must mutually recurse with those from the bindings
-             let z, pdsPrior = PopPreDecs z
-             let binds, z = List.mapFold (TransBindingRhs penv) z binds
-             let z, pdsRhs = PopPreDecs z
-             let binds, rebinds = TransBindings   IsRec penv binds
-             let z, binds = LiftTopBinds IsRec penv z   binds (* factor Top* repr binds *)
-             let z, rebinds = LiftTopBinds IsRec penv z rebinds
-             let z, pdsBind = PopPreDecs z
-             let z = SetPreDecs z (TreeNode [pdsPrior;RecursivePreDecs pdsBind pdsRhs])
-             let z = ExitInner z
-             let pds, z = ExtractPreDecs z
-             // tailcall
-             TransLinearExpr penv z e (contf << (fun (e, z) ->
-                 let e = mkLetsFromBindings m rebinds e
-                 MakePreDecs m pds (Expr.LetRec (binds, e, m, Construct.NewFreeVarsCache())), z))
+        // letrec - pass_recbinds does the work
+        | Expr.LetRec(binds, e, m, _) ->
+            let z = EnterInner z
+            // For letrec, preDecs from RHS must mutually recurse with those from the bindings
+            let z, pdsPrior = PopPreDecs z
+            let binds, z = List.mapFold (TransBindingRhs penv) z binds
+            let z, pdsRhs = PopPreDecs z
+            let binds, rebinds = TransBindings IsRec penv binds
+            let z, binds = LiftTopBinds IsRec penv z binds (* factor Top* repr binds *)
+            let z, rebinds = LiftTopBinds IsRec penv z rebinds
+            let z, pdsBind = PopPreDecs z
+            let z = SetPreDecs z (TreeNode [ pdsPrior; RecursivePreDecs pdsBind pdsRhs ])
+            let z = ExitInner z
+            let pds, z = ExtractPreDecs z
+            // tailcall
+            TransLinearExpr
+                penv
+                z
+                e
+                (contf
+                 << (fun (e, z) ->
+                     let e = mkLetsFromBindings m rebinds e
+                     MakePreDecs m pds (Expr.LetRec(binds, e, m, Construct.NewFreeVarsCache())), z))
 
-         // let - can consider the mu-let bindings as mu-letrec bindings - so like as above
-         | Expr.Let    (bind, e, m, _) ->
+        // let - can consider the mu-let bindings as mu-letrec bindings - so like as above
+        | Expr.Let(bind, e, m, _) ->
 
-             // For let, preDecs from RHS go before those of bindings, which is collection order
-             let bind, z = TransBindingRhs penv z bind
-             let binds, rebinds = TransBindings   NotRec penv [bind]
-             // factor Top* repr binds
-             let z, binds = LiftTopBinds NotRec penv z   binds
-             let z, rebinds = LiftTopBinds NotRec penv z rebinds
-             // any lifted PreDecs from binding, if so wrap them...
-             let pds, z = ExtractPreDecs z
-             // tailcall
-             TransLinearExpr penv z e (contf << (fun (e, z) ->
-                 let e = mkLetsFromBindings m rebinds e
-                 MakePreDecs m pds (mkLetsFromBindings m binds e), z))
+            // For let, preDecs from RHS go before those of bindings, which is collection order
+            let bind, z = TransBindingRhs penv z bind
+            let binds, rebinds = TransBindings NotRec penv [ bind ]
+            // factor Top* repr binds
+            let z, binds = LiftTopBinds NotRec penv z binds
+            let z, rebinds = LiftTopBinds NotRec penv z rebinds
+            // any lifted PreDecs from binding, if so wrap them...
+            let pds, z = ExtractPreDecs z
+            // tailcall
+            TransLinearExpr
+                penv
+                z
+                e
+                (contf
+                 << (fun (e, z) ->
+                     let e = mkLetsFromBindings m rebinds e
+                     MakePreDecs m pds (mkLetsFromBindings m binds e), z))
 
-         | LinearMatchExpr (spBind, mExpr, dtree, tg1, e2, m2, ty) ->
-             let dtree, z = TransDecisionTree penv z dtree
-             let tg1, z = TransDecisionTreeTarget penv z tg1
-             // tailcall
-             TransLinearExpr penv z e2 (contf << (fun (e2, z) ->
-                 rebuildLinearMatchExpr (spBind, mExpr, dtree, tg1, e2, m2, ty), z))
+        | LinearMatchExpr(spBind, mExpr, dtree, tg1, e2, m2, ty) ->
+            let dtree, z = TransDecisionTree penv z dtree
+            let tg1, z = TransDecisionTreeTarget penv z tg1
+            // tailcall
+            TransLinearExpr
+                penv
+                z
+                e2
+                (contf
+                 << (fun (e2, z) -> rebuildLinearMatchExpr (spBind, mExpr, dtree, tg1, e2, m2, ty), z))
 
-         | LinearOpExpr (op, tyargs, argsHead, argLast, m) ->
-             let argsHead,z = List.mapFold (TransExpr penv) z argsHead
-             // tailcall
-             TransLinearExpr penv z argLast (contf << (fun (argLast, z) ->
-                 rebuildLinearOpExpr (op, tyargs, argsHead, argLast, m), z))
+        | LinearOpExpr(op, tyargs, argsHead, argLast, m) ->
+            let argsHead, z = List.mapFold (TransExpr penv) z argsHead
+            // tailcall
+            TransLinearExpr
+                penv
+                z
+                argLast
+                (contf
+                 << (fun (argLast, z) -> rebuildLinearOpExpr (op, tyargs, argsHead, argLast, m), z))
 
-         | _ -> 
+        | _ ->
             // not a linear expression
             contf (TransExpr penv z expr)
 
@@ -1271,28 +1458,29 @@ module Pass4_RewriteAssembly =
     and TransBindingRhs penv z (TBind(v, e, letSeqPtOpt)) : Binding * RewriteState =
         let shouldInline = v.ShouldInline
         let z, e = EnterShouldInline shouldInline z (fun z -> TransExpr penv z e)
-        TBind (v, e, letSeqPtOpt), z
+        TBind(v, e, letSeqPtOpt), z
 
-    and TransDecisionTree penv z x: DecisionTree * RewriteState =
-       match x with
-       | TDSuccess (es, n) ->
-           let es, z = List.mapFold (TransExpr penv) z es
-           TDSuccess(es, n), z
+    and TransDecisionTree penv z x : DecisionTree * RewriteState =
+        match x with
+        | TDSuccess(es, n) ->
+            let es, z = List.mapFold (TransExpr penv) z es
+            TDSuccess(es, n), z
 
-       | TDBind (bind, rest) ->
-           let bind, z = TransBindingRhs penv z bind
-           let rest, z = TransDecisionTree penv z rest
-           TDBind(bind, rest), z
+        | TDBind(bind, rest) ->
+            let bind, z = TransBindingRhs penv z bind
+            let rest, z = TransDecisionTree penv z rest
+            TDBind(bind, rest), z
 
-       | TDSwitch (e, cases, dflt, m) ->
-           let e, z = TransExpr penv z e
-           let TransDecisionTreeCase penv z (TCase (discrim, dtree)) =
-               let dtree, z = TransDecisionTree penv z dtree
-               TCase(discrim, dtree), z
+        | TDSwitch(e, cases, dflt, m) ->
+            let e, z = TransExpr penv z e
 
-           let cases, z = List.mapFold (TransDecisionTreeCase penv) z cases
-           let dflt, z = Option.mapFold (TransDecisionTree penv) z dflt
-           TDSwitch (e, cases, dflt, m), z
+            let TransDecisionTreeCase penv z (TCase(discrim, dtree)) =
+                let dtree, z = TransDecisionTree penv z dtree
+                TCase(discrim, dtree), z
+
+            let cases, z = List.mapFold (TransDecisionTreeCase penv) z cases
+            let dflt, z = Option.mapFold (TransDecisionTree penv) z dflt
+            TDSwitch(e, cases, dflt, m), z
 
     and TransDecisionTreeTarget penv z (TTarget(vs, e, flags)) =
         let z = EnterInner z
@@ -1302,26 +1490,27 @@ module Pass4_RewriteAssembly =
 
     and TransValBinding penv z bind = TransBindingRhs penv z bind
 
-    and TransValBindings penv z binds = List.mapFold (TransValBinding penv) z  binds
+    and TransValBindings penv z binds =
+        List.mapFold (TransValBinding penv) z binds
 
-    and TransModuleContents penv (z: RewriteState) x: ModuleOrNamespaceContents * RewriteState =
+    and TransModuleContents penv (z: RewriteState) x : ModuleOrNamespaceContents * RewriteState =
         match x with
         | TMDefRec(isRec, opens, tycons, mbinds, m) ->
             let mbinds, z = TransModuleBindings penv z mbinds
             TMDefRec(isRec, opens, tycons, mbinds, m), z
-        | TMDefLet(bind, m)            ->
+        | TMDefLet(bind, m) ->
             let bind, z = TransValBinding penv z bind
             TMDefLet(bind, m), z
-        | TMDefDo(e, m)            ->
+        | TMDefDo(e, m) ->
             let _bind, z = TransExpr penv z e
             TMDefDo(e, m), z
-        | TMDefs defs   ->
+        | TMDefs defs ->
             let defs, z = List.mapFold (TransModuleContents penv) z defs
             TMDefs defs, z
-        | TMDefOpens _ ->
-            x, z
+        | TMDefOpens _ -> x, z
 
-    and TransModuleBindings penv z binds = List.mapFold (TransModuleBinding penv) z  binds
+    and TransModuleBindings penv z binds =
+        List.mapFold (TransModuleBinding penv) z binds
 
     and TransModuleBinding penv z x =
         match x with
@@ -1332,58 +1521,73 @@ module Pass4_RewriteAssembly =
             let rhs, z = TransModuleContents penv z rhs
             ModuleOrNamespaceBinding.Module(nm, rhs), z
 
-    let TransImplFile penv z (CheckedImplFile (fragName, signature, contents, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)) =
+    let TransImplFile
+        penv
+        z
+        (CheckedImplFile(fragName, signature, contents, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode))
+        =
         let contentsR, z = TransModuleContents penv z contents
-        (CheckedImplFile (fragName, signature, contentsR, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)), z
+        (CheckedImplFile(fragName, signature, contentsR, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)), z
 
 //-------------------------------------------------------------------------
 // pass5: copyExpr
 //-------------------------------------------------------------------------
 
-let RecreateUniqueBounds g expr =
-    copyImplFile g OnlyCloneExprVals expr
+let RecreateUniqueBounds g expr = copyImplFile g OnlyCloneExprVals expr
 
 //-------------------------------------------------------------------------
 // entry point
 //-------------------------------------------------------------------------
 
 let MakeTopLevelRepresentationDecisions ccu g expr =
-   try
-      // pass1: choose the f to be TLR with arity(f)
-      let tlrS, topValS, arityM = Pass1_DetermineTLRAndArities.DetermineTLRAndArities g expr
+    try
+        // pass1: choose the f to be TLR with arity(f)
+        let tlrS, topValS, arityM =
+            Pass1_DetermineTLRAndArities.DetermineTLRAndArities g expr
 
-      // pass2: determine the typar/freevar closures, f->fclass and fclass declist
-      let reqdItemsMap, fclassM, declist, recShortCallS = Pass2_DetermineReqdItems.DetermineReqdItems (tlrS, arityM) expr
+        // pass2: determine the typar/freevar closures, f->fclass and fclass declist
+        let reqdItemsMap, fclassM, declist, recShortCallS =
+            Pass2_DetermineReqdItems.DetermineReqdItems (tlrS, arityM) expr
 
-      // pass3
-      let envPackM = ChooseReqdItemPackings g fclassM topValS  declist reqdItemsMap
-      let fHatM = CreateNewValuesForTLR g tlrS arityM fclassM envPackM
+        // pass3
+        let envPackM = ChooseReqdItemPackings g fclassM topValS declist reqdItemsMap
+        let fHatM = CreateNewValuesForTLR g tlrS arityM fclassM envPackM
 
-      // pass4: rewrite
-      if verboseTLR then dprintf "TransExpr(rw)------\n"
-      let expr, _ =
-          let penv: Pass4_RewriteAssembly.RewriteContext =
-              { ccu = ccu
-                g = g
-                tlrS = tlrS
-                topValS = topValS
-                arityM = arityM
-                fclassM = fclassM
-                recShortCallS = recShortCallS
-                envPackM = envPackM
-                fHatM = fHatM
-                stackGuard = StackGuard(InnerLambdasToTopLevelFunctionsStackGuardDepth, "InnerLambdasToTopLevelFunctionsStackGuardDepth") }
-          let z = Pass4_RewriteAssembly.rewriteState0
-          Pass4_RewriteAssembly.TransImplFile penv z expr
+        // pass4: rewrite
+        if verboseTLR then
+            dprintf "TransExpr(rw)------\n"
 
-      // pass5: copyExpr to restore "each bound is unique" property
-      // aka, copyExpr
-      if verboseTLR then dprintf "copyExpr------\n"
-      let expr = RecreateUniqueBounds g expr
-      if verboseTLR then dprintf "TLR-done------\n"
+        let expr, _ =
+            let penv: Pass4_RewriteAssembly.RewriteContext =
+                {
+                    ccu = ccu
+                    g = g
+                    tlrS = tlrS
+                    topValS = topValS
+                    arityM = arityM
+                    fclassM = fclassM
+                    recShortCallS = recShortCallS
+                    envPackM = envPackM
+                    fHatM = fHatM
+                    stackGuard =
+                        StackGuard(InnerLambdasToTopLevelFunctionsStackGuardDepth, "InnerLambdasToTopLevelFunctionsStackGuardDepth")
+                }
 
-      expr
+            let z = Pass4_RewriteAssembly.rewriteState0
+            Pass4_RewriteAssembly.TransImplFile penv z expr
 
-   with AbortTLR m ->
-       warning(Error(FSComp.SR.tlrLambdaLiftingOptimizationsNotApplied(), m))
-       expr
+        // pass5: copyExpr to restore "each bound is unique" property
+        // aka, copyExpr
+        if verboseTLR then
+            dprintf "copyExpr------\n"
+
+        let expr = RecreateUniqueBounds g expr
+
+        if verboseTLR then
+            dprintf "TLR-done------\n"
+
+        expr
+
+    with AbortTLR m ->
+        warning (Error(FSComp.SR.tlrLambdaLiftingOptimizationsNotApplied (), m))
+        expr
