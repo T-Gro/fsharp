@@ -1042,7 +1042,7 @@ module internal SymbolHelpers =
         | Item.UnionCaseField _
         | Item.TypeVar _
         | Item.ImplicitOp _
-        | Item.ActivePatternResult _ ->  // "let (|Foo|Bar|) = .. Fo$o ..." - no keyword
+        | Item.ActivePatternResult _ -> // "let (|Foo|Bar|) = .. Fo$o ..." - no keyword
             None
 
     /// Select the items that participate in a MethodGroup.
