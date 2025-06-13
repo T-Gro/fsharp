@@ -5,6 +5,10 @@ on:
     types: [created]
 
 jobs:
+  # This first job by definiton runs user-supplied code - you must NOT elevate its permissions to `write`
+  # Malicious code could change nuget source URL, build targets or even compiler itself to pass a GH token
+  # And use it to create branches, spam issues etc. Any write-actions happen in the second job, which does not allow
+  # user extension points (i.e. plain scripts, must NOT run scripts from within checked-out code)
   detect-and-run:
     runs-on: ubuntu-latest
     outputs:
@@ -24,9 +28,12 @@ jobs:
             /run xlf
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+          
       - name: Checkout PR branch
         if: ${{ steps.parse.outputs.command }}
-        run: gh pr checkout ${{ github.event.issue.number }}
+        run: gh auth setup-git && gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
