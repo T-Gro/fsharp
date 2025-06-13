@@ -44,6 +44,12 @@ jobs:
 
       - name: Install dotnet tools
         run: dotnet tool restore
+        
+      - name: Setup .NET 9.0.0 Runtime for test execution
+        if: ${{ steps.parse.outputs.command == '/run test-baseline' }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
 
       - name: Run command
         id: run-cmd
