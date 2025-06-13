@@ -88,6 +88,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -152,11 +153,17 @@ jobs:
           # Store for use in next step
           echo "$report" > pr_report.md
 
+      - name: Determine PR number
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV  
+
       - name: Comment on PR
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
         run: |
           # Use gh CLI to comment with multi-line markdown
-          gh pr comment ${{ github.event.pull_request.number }} \
+          gh pr comment "$PR_NUMBER" \
             --body-file pr_report.md
