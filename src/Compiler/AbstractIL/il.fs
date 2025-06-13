@@ -47,7 +47,7 @@ type PrimaryAssembly =
 
     member this.Name =
         match this with
-        | Mscorlib -> "mscorlib"
+        | Mscorlib ->         "mscorlib"
         | System_Runtime -> "System.Runtime"
         | NetStandard -> "netstandard"
 
@@ -55,7 +55,7 @@ type PrimaryAssembly =
         let name = System.IO.Path.GetFileNameWithoutExtension(fileName)
 
         String.Equals(name, "System.Runtime", StringComparison.OrdinalIgnoreCase)
-        || String.Equals(name, "mscorlib", StringComparison.OrdinalIgnoreCase)
+        || String.Equals(name,     "mscorlib", StringComparison.OrdinalIgnoreCase)
         || String.Equals(name, "netstandard", StringComparison.OrdinalIgnoreCase)
         || String.Equals(name, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase)
 
@@ -74,7 +74,7 @@ let memoizeNamespaceRightTable =
 // ++GLOBAL MUTABLE STATE (concurrency-safe)
 let memoizeNamespacePartTable = ConcurrentDictionary<string, string>()
 
-let splitNameAt (nm: string) idx =
+let splitNameAt (nm  : string)    idx     =
     if idx < 0 then
         failwith "splitNameAt: idx < 0"
 
