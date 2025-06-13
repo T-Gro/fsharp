@@ -60,8 +60,8 @@ type UnionReprDecisions<'Union, 'Alt, 'Type>
     (
         getAlternatives: 'Union -> 'Alt[],
         nullPermitted: 'Union -> bool,
-        isNullary: 'Alt    ->    bool  ,
-        
+        isNullary: 'Alt -> bool,
+
         isList: 'Union -> bool,
         isStruct: 'Union -> bool,
         nameOfAlt: 'Alt -> string,
@@ -112,14 +112,14 @@ type UnionReprDecisions<'Union, 'Alt, 'Type>
         let alts = getAlternatives cu
 
         not (isStruct cu)
-        && not (   isNullary alt   )
+        && not (isNullary alt)
         && (alts
             |> Array.forall (fun alt2 -> not (isNullary alt2) || repr.RepresentAlternativeAsNull(cu, alt2)))
         &&
         // Check this is the one and only non-nullary constructor
         Array.existsOne (isNullary >> not) alts
 
-    member    repr.RepresentAlternativeAsStructValue cu =    isStruct cu
+    member repr.RepresentAlternativeAsStructValue cu = isStruct cu
 
     member repr.RepresentAlternativeAsFreshInstancesOfRootClass(cu, alt) =
         not (isStruct cu)

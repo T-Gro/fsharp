@@ -934,14 +934,10 @@ let pickleObjWithDanglingCcus inMem file g scope p x =
             oscope = scope
             occus = Table<_>.Create "occus"
             oentities =
-                NodeOutTable<_, _>
-                    .Create((fun (tc: Tycon) -> tc.Stamp), (fun tc -> tc.LogicalName), (fun tc -> tc.Range), id, "otycons")
+                NodeOutTable<_, _>.Create((fun (tc: Tycon) -> tc.Stamp), (fun tc -> tc.LogicalName), (fun tc -> tc.Range), id, "otycons")
             otypars =
-                NodeOutTable<_, _>
-                    .Create((fun (tp: Typar) -> tp.Stamp), (fun tp -> tp.DisplayName), (fun tp -> tp.Range), id, "otypars")
-            ovals =
-                NodeOutTable<_, _>
-                    .Create((fun (v: Val) -> v.Stamp), (fun v -> v.LogicalName), (fun v -> v.Range), id, "ovals")
+                NodeOutTable<_, _>.Create((fun (tp: Typar) -> tp.Stamp), (fun tp -> tp.DisplayName), (fun tp -> tp.Range), id, "otypars")
+            ovals = NodeOutTable<_, _>.Create((fun (v: Val) -> v.Stamp), (fun v -> v.LogicalName), (fun v -> v.Range), id, "ovals")
             oanoninfos =
                 NodeOutTable<_, _>
                     .Create((fun (v: AnonRecdTypeInfo) -> v.Stamp), (fun v -> string v.IlTypeName), (fun _ -> range0), id, "oanoninfos")
@@ -970,11 +966,9 @@ let pickleObjWithDanglingCcus inMem file g scope p x =
             oscope = scope
             occus = Table<_>.Create "occus (fake)"
             oentities =
-                NodeOutTable<_, _>
-                    .Create((fun (tc: Tycon) -> tc.Stamp), (fun tc -> tc.LogicalName), (fun tc -> tc.Range), id, "otycons")
+                NodeOutTable<_, _>.Create((fun (tc: Tycon) -> tc.Stamp), (fun tc -> tc.LogicalName), (fun tc -> tc.Range), id, "otycons")
             otypars =
-                NodeOutTable<_, _>
-                    .Create((fun (tp: Typar) -> tp.Stamp), (fun tp -> tp.DisplayName), (fun tp -> tp.Range), id, "otypars")
+                NodeOutTable<_, _>.Create((fun (tp: Typar) -> tp.Stamp), (fun tp -> tp.DisplayName), (fun tp -> tp.Range), id, "otypars")
             ovals =
                 NodeOutTable<_, _>
                     .Create((fun (v: Val) -> v.Stamp), (fun v -> v.LogicalName), (fun v -> v.Range), (fun osgn -> osgn), "ovals")
@@ -1049,14 +1043,9 @@ let unpickleObjWithDanglingCcus
             iilscope = viewedScope
             iccus = new_itbl "iccus (fake)" [||]
             ientities =
-                NodeInTable<_, _>
-                    .Create(Tycon.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "itycons", 0)
-            itypars =
-                NodeInTable<_, _>
-                    .Create(Typar.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "itypars", 0)
-            ivals =
-                NodeInTable<_, _>
-                    .Create(Val.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "ivals", 0)
+                NodeInTable<_, _>.Create(Tycon.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "itycons", 0)
+            itypars = NodeInTable<_, _>.Create(Typar.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "itypars", 0)
+            ivals = NodeInTable<_, _>.Create(Val.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "ivals", 0)
             ianoninfos =
                 NodeInTable<_, _>
                     .Create(AnonRecdTypeInfo.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "ianoninfos", 0)
@@ -1109,8 +1098,7 @@ let unpickleObjWithDanglingCcus
                     NodeInTable<_, _>
                         .Create(Typar.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "itypars", ntypars)
                 ivals =
-                    NodeInTable<_, _>
-                        .Create(Val.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "ivals", nvals)
+                    NodeInTable<_, _>.Create(Val.NewUnlinked, (fun osgn tg -> osgn.Link tg), (fun osgn -> osgn.IsLinked), "ivals", nvals)
                 ianoninfos =
                     NodeInTable<_, _>
                         .Create(
