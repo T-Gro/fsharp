@@ -64,7 +64,7 @@ jobs:
         run: |
           echo "outcome=${{ steps.run-cmd.outcome }}" > result
           if [[ "${{ steps.run-cmd.outcome }}" == "success" ]]; then
-            git diff -U5 > repo.patch || true
+            git diff > repo.patch || true
             if [ -s repo.patch ]; then echo "hasPatch=true" >> result; else echo "hasPatch=false" >> result; fi
           else
             echo "hasPatch=false" >> result
@@ -111,7 +111,7 @@ jobs:
       - name: Apply and push patch
         if: ${{ steps.read-meta.outputs.step_outcome == 'success' && steps.read-meta.outputs.hasPatch == 'true' }}
         run: |
-          git apply --3way repo.patch
+          patch -p1 < repo.patch
           git config user.name "GH Actions"
           git config user.email "actions@github.com"
           git add -A
