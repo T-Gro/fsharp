@@ -7,9 +7,6 @@ on:
 jobs:
   detect-and-run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
       command: ${{ steps.parse.outputs.command }}
       step_outcome: ${{ steps.run-cmd.outcome }}
