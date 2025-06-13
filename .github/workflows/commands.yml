@@ -115,7 +115,7 @@ jobs:
           git config user.name "GH Actions"
           git config user.email "actions@github.com"          
           git add -u
-          git commit -m "Apply patch from `${{ needs.detect-and-run.outputs.command }}`"
+          git commit -m "Apply patch from ${{ needs.detect-and-run.outputs.command }}"
           upstream=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
           remote=${upstream%%/*}
           branch=${upstream#*/}
