@@ -61,6 +61,7 @@ type UnionReprDecisions<'Union, 'Alt, 'Type>
         getAlternatives: 'Union -> 'Alt[],
         nullPermitted: 'Union -> bool,
         isNullary: 'Alt -> bool,
+
         isList: 'Union -> bool,
         isStruct: 'Union -> bool,
         nameOfAlt: 'Alt -> string,
