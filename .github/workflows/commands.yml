@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Parse comment
         id: parse
-        uses: drewwyatt/comment-pipeline@v1
+        uses: dotnet/comment-pipeline@v1
         with:
           comment: ${{ toJSON(github.event.comment) }}
           commands: |
