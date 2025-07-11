@@ -5,12 +5,10 @@ on:
     types: [created]
 
 jobs:
-  # This first job by definiton runs user-supplied code - you must NOT elevate its permissions to `write`
-  # Malicious code could change nuget source URL, build targets or even compiler itself to pass a GH token
-  # And use it to create branches, spam issues etc. Any write-actions happen in the second job, which does not allow
-  # user extension points (i.e. plain scripts, must NOT run scripts from within checked-out code)
-  detect-and-run:
+  parsing_job:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write  # Allow adding a reaction via the comment-pipeline
     outputs:
       command: ${{ steps.parse.outputs.command }}
       arg: ${{ steps.parse.outputs.arguments }}
@@ -18,7 +16,7 @@ jobs:
     steps:
       - name: Parse comment
         id: parse
-        uses: dotnet/comment-pipeline@v1
+        uses: dotnet/comment-pipeline@e08a11834acf1e825ac727b732ac9d4cb8120c51
         with:
           comment: ${{ toJSON(github.event.comment) }}
           commands: |
@@ -28,11 +26,24 @@ jobs:
             /run test-baseline
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  # This first job by definiton runs user-supplied code - you must NOT elevate its permissions to `write`
+  # Malicious code could change nuget source URL, build targets or even compiler itself to pass a GH token
+  # And use it to create branches, spam issues etc. Any write-actions happen in the second job, which does not allow
+  # user extension points (i.e. plain scripts, must NOT run scripts from within checked-out code)
+  detect-and-run:
+    needs: parsing_job
+    runs-on: ubuntu-latest
+    outputs:
+      command: ${{ needs.parsing_job.outputs.command }}
+      arg: ${{ needs.parsing_job.outputs.arg }}
+    if: needs.parsing_job.outputs.command != ''
+    steps:
+
       - name: Checkout the repository
         uses: actions/checkout@v4
           
       - name: Checkout PR branch
-        if: ${{ steps.parse.outputs.command }}
+        if: ${{ needs.parsing_job.outputs.command }}
         run: gh auth setup-git && gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,7 +57,7 @@ jobs:
         run: dotnet tool restore
         
       - name: Setup .NET 9.0.0 Runtime for test execution
-        if: ${{ steps.parse.outputs.command == '/run test-baseline' }}
+        if: ${{ needs.parsing_job.outputs.command == '/run test-baseline' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
@@ -57,17 +68,17 @@ jobs:
           TEST_UPDATE_BSL: 1
         continue-on-error: true
         run: |
-          case "${{ steps.parse.outputs.command }}" in
+          case "${{ needs.parsing_job.outputs.command }}" in
             "/run fantomas") dotnet fantomas . ;;
             "/run xlf") dotnet build src/Compiler /t:UpdateXlf ;;
             "/run ilverify") pwsh tests/ILVerify/ilverify.ps1 ;;
-            "/run test-baseline") dotnet test ./FSharp.Compiler.Service.sln --filter "${{ steps.parse.outputs.arguments }}" -c Release || true ;;
+            "/run test-baseline") dotnet test ./FSharp.Compiler.Service.sln --filter "${{ needs.parsing_job.outputs.arg }}" -c Release || true ;;
             *) echo "Unknown command" && exit 1 ;;
           esac
 
       - name: Create patch & metadata
         id: meta
-        if: steps.parse.outputs.command
+        if: needs.parsing_job.outputs.command
         run: |
           echo "run_step_outcome=${{ steps.run-cmd.outcome }}" > result
           if [[ "${{ steps.run-cmd.outcome }}" == "success" ]]; then
@@ -87,12 +98,12 @@ jobs:
             result
 
   apply-and-report:
-    needs: detect-and-run
+    needs: [parsing_job, detect-and-run]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    if: needs.detect-and-run.outputs.command != ''
+    if: needs.parsing_job.outputs.command != ''
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
@@ -140,7 +151,7 @@ jobs:
       - name: Generate and publish report
         if: always()
         env:
-          COMMAND: ${{ needs.detect-and-run.outputs.command }}
+          COMMAND: ${{ needs.parsing_job.outputs.command }}
           OUTCOME: ${{ steps.read-meta.outputs.run_step_outcome }}
           PATCH: ${{ steps.read-meta.outputs.hasPatch }}
         run: |
