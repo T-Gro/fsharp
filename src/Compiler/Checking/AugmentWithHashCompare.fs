@@ -15,7 +15,14 @@ open FSharp.Compiler.TypedTreeOps
 open FSharp.Compiler.TypeHierarchy
 
 let mkIComparableCompareToSlotSig (g: TcGlobals) =
-    TSlotSig("CompareTo", g.mk_IComparable_ty, [], [], [ [ TSlotParam(Some("obj"), g.obj_ty_withNulls, false, false, false, []) ] ], Some g.int_ty)
+    TSlotSig(
+        "CompareTo",
+        g.mk_IComparable_ty,
+        [],
+        [],
+        [ [ TSlotParam(Some("obj"), g.obj_ty_withNulls, false, false, false, []) ] ],
+        Some g.int_ty
+    )
 
 let mkGenericIComparableCompareToSlotSig (g: TcGlobals) ty =
     TSlotSig(
@@ -79,7 +86,14 @@ let mkGetHashCodeSlotSig (g: TcGlobals) =
     TSlotSig("GetHashCode", g.obj_ty_noNulls, [], [], [ [] ], Some g.int_ty)
 
 let mkEqualsSlotSig (g: TcGlobals) =
-    TSlotSig("Equals", g.obj_ty_noNulls, [], [], [ [ TSlotParam(Some("obj"), g.obj_ty_withNulls, false, false, false, []) ] ], Some g.bool_ty)
+    TSlotSig(
+        "Equals",
+        g.obj_ty_noNulls,
+        [],
+        [],
+        [ [ TSlotParam(Some("obj"), g.obj_ty_withNulls, false, false, false, []) ] ],
+        Some g.bool_ty
+    )
 
 //-------------------------------------------------------------------------
 // Helpers associated with code-generation of comparison/hash augmentations
@@ -386,8 +400,8 @@ let mkRecdEqualityWithComparer g tcref (tycon: Tycon) thise thatobje (thatv, tha
 
     let expr = mkBindThatAddr g m ty thataddrv thatv thate expr
 
-    let expr = 
-        if isexact then 
+    let expr =
+        if isexact then
             expr
         else
             mkIsInstConditional g m ty thatobje thatv expr (mkFalse g m)
@@ -395,11 +409,10 @@ let mkRecdEqualityWithComparer g tcref (tycon: Tycon) thise thatobje (thatv, tha
     let expr =
         if tycon.IsStructOrEnumTycon then
             expr
+        else if isexact then
+            mkBindThatNullEquals g m thise thate expr
         else
-            if isexact then
-                mkBindThatNullEquals g m thise thate expr
-            else
-                mkBindThisNullEquals g m thise thatobje expr
+            mkBindThisNullEquals g m thise thatobje expr
 
     expr
 
@@ -464,20 +477,19 @@ let mkExnEqualityWithComparer g exnref (exnc: Tycon) thise thatobje (thatv, that
 
     let expr = mkBindThatAddr g m g.exn_ty thataddrv thatv thate expr
 
-    let expr = 
+    let expr =
         if isexact then
             expr
-        else 
+        else
             mkIsInstConditional g m g.exn_ty thatobje thatv expr (mkFalse g m)
 
     let expr =
         if exnc.IsStructOrEnumTycon then
             expr
+        else if isexact then
+            mkBindThatNullEquals g m thise thate expr
         else
-            if isexact then
-                mkBindThatNullEquals g m thise thate expr
-            else
-                mkBindThisNullEquals g m thise thatobje expr
+            mkBindThisNullEquals g m thise thatobje expr
 
     expr
 
@@ -865,7 +877,7 @@ let mkUnionEqualityWithComparer g tcref (tycon: Tycon) thise thatobje (thatv, th
 
     let expr = mkBindThatAddr g m ty thataddrv thatv thate expr
 
-    let expr = 
+    let expr =
         if isexact then
             expr
         else
@@ -874,11 +886,10 @@ let mkUnionEqualityWithComparer g tcref (tycon: Tycon) thise thatobje (thatv, th
     let expr =
         if tycon.IsStructOrEnumTycon then
             expr
+        else if isexact then
+            mkBindThatNullEquals g m thise thate expr
         else
-            if isexact then
-                mkBindThatNullEquals g m thise thate expr
-            else
-                mkBindThisNullEquals g m thise thatobje expr
+            mkBindThisNullEquals g m thise thatobje expr
 
     expr
 
@@ -1041,7 +1052,7 @@ let getAugmentationAttribs g (tycon: Tycon) =
     TryFindFSharpBoolAttribute g g.attrib_StructuralComparisonAttribute tycon.Attribs
 
 [<NoEquality; NoComparison; StructuredFormatDisplay("{DebugText}")>]
-type EqualityWithComparerAugmentation = 
+type EqualityWithComparerAugmentation =
     {
         GetHashCode: Val
         GetHashCodeWithComparer: Val
@@ -1369,24 +1380,27 @@ let MakeValsForEqualityWithComparerAugmentation g (tcref: TyconRef) =
         mkValSpec g tcref ty vis (Some(mkIStructuralEquatableEqualsSlotSig g)) "Equals" (tps +-> (mkEqualsWithComparerTy g ty)) tupArg false
 
     let withEqualsExactWithComparer =
-        let vis = TAccess (updateSyntaxAccessForCompPath (vis.CompilationPaths) SyntaxAccess.Public)
+        let vis =
+            TAccess(updateSyntaxAccessForCompPath (vis.CompilationPaths) SyntaxAccess.Public)
+
         mkValSpec
-            g 
-            tcref 
+            g
+            tcref
             ty
             vis
             // This doesn't implement any interface.
-            None 
-            "Equals" 
-            (tps +-> (mkEqualsWithComparerTyExact g ty)) 
-            tupArg 
+            None
+            "Equals"
+            (tps +-> (mkEqualsWithComparerTyExact g ty))
+            tupArg
             false
+
     {
         GetHashCode = objGetHashCodeVal
         GetHashCodeWithComparer = withGetHashCodeVal
         EqualsWithComparer = withEqualsVal
         EqualsExactWithComparer = withEqualsExactWithComparer
-    }    
+    }
 
 let MakeBindingsForCompareAugmentation g (tycon: Tycon) =
     let tcref = mkLocalTyconRef tycon
@@ -1515,21 +1529,20 @@ let MakeBindingsForEqualityWithComparerAugmentation (g: TcGlobals) (tycon: Tycon
                 let equalse =
                     match withcEqualsExactValOption with
                     | Some withcEqualsExactVal ->
-                         mkIsInstConditional
-                             g
-                             m
-                             ty
-                             thatobje
-                             thatv
-                             (mkApps
-                                 g
-                                 ((exprForValRef m withcEqualsExactVal, withcEqualsExactVal.Type),
-                                  (if isNil tinst then [] else [ tinst ]),
-                                  [ thise; mkRefTupled g m [ thate; compe ] [ty; g.IEqualityComparer_ty ] ],
-                                  m))
-                             (mkFalse g m)
-                    | None ->
-                        equalsf g tcref tycon thise thatobje (thatv, thate) compe false
+                        mkIsInstConditional
+                            g
+                            m
+                            ty
+                            thatobje
+                            thatv
+                            (mkApps
+                                g
+                                ((exprForValRef m withcEqualsExactVal, withcEqualsExactVal.Type),
+                                 (if isNil tinst then [] else [ tinst ]),
+                                 [ thise; mkRefTupled g m [ thate; compe ] [ ty; g.IEqualityComparer_ty ] ],
+                                 m))
+                            (mkFalse g m)
+                    | None -> equalsf g tcref tycon thise thatobje (thatv, thate) compe false
 
                 mkMultiLambdas g m tps [ [ thisv ]; [ thatobjv; compv ] ] (equalse, g.bool_ty)
 
