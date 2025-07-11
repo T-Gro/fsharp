@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write  # Allow adding a reaction via the comment-pipeline
+      pull-requests: write
     outputs:
       command: ${{ steps.parse.outputs.command }}
       arg: ${{ steps.parse.outputs.arguments }}
@@ -30,12 +31,9 @@ jobs:
   # Malicious code could change nuget source URL, build targets or even compiler itself to pass a GH token
   # And use it to create branches, spam issues etc. Any write-actions happen in the second job, which does not allow
   # user extension points (i.e. plain scripts, must NOT run scripts from within checked-out code)
-  detect-and-run:
+  run-parsed-command:
     needs: parsing_job
     runs-on: ubuntu-latest
-    outputs:
-      command: ${{ needs.parsing_job.outputs.command }}
-      arg: ${{ needs.parsing_job.outputs.arg }}
     if: needs.parsing_job.outputs.command != ''
     steps:
 
@@ -43,7 +41,6 @@ jobs:
         uses: actions/checkout@v4
           
       - name: Checkout PR branch
-        if: ${{ needs.parsing_job.outputs.command }}
         run: gh auth setup-git && gh pr checkout ${{ github.event.issue.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,12 +95,12 @@ jobs:
             result
 
   apply-and-report:
-    needs: [parsing_job, detect-and-run]
+    needs: [parsing_job, run-parsed-command]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    if: needs.parsing_job.outputs.command != ''
+    if: needs.parsing_job.outputs.command != '' && needs.run-parsed-command.result == 'success'
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
@@ -132,7 +129,7 @@ jobs:
           git config user.name "GH Actions"
           git config user.email "actions@github.com"          
           git add -u
-          git commit -m "Apply patch from ${{ needs.detect-and-run.outputs.command }}"
+          git commit -m "Apply patch from ${{ needs.parsing_job.outputs.command }}"
           upstream=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
           remote=${upstream%%/*}
           branch=${upstream#*/}
