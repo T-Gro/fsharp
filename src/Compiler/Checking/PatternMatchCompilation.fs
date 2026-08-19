@@ -3,6 +3,7 @@
 module internal FSharp.Compiler.PatternMatchCompilation
 
 open System.Collections.Generic
+open Internal.Utilities.Collections
 open Internal.Utilities.Library
 open Internal.Utilities.Library.Extras
 open FSharp.Compiler
@@ -1138,10 +1139,7 @@ let CompilePatternBasic
         GetSubExprOfInput g (origInputValTypars, tyargs, unit_tpinst),
         getDiscrimOfPattern g unit_tpinst
 
-    // The main recursive loop of the pattern match compiler.
-
     // Repeated states stay inline until the threshold, preserving ordinary match output.
-    let stackGuard = StackGuard("InvestigateFrontiers")
     let joinPromotionThreshold = 32
     let isThunkableTy ty = not (isByrefLikeTy g mExpr ty) && not (isByrefTy g ty)
     let joinBindings = ResizeArray<Binding>()
@@ -1155,7 +1153,7 @@ let CompilePatternBasic
         && not (fvs.ContainsILFieldAccess && exprReferencesProtectedILField amap body)
         && isThunkableTy resultTy
         && fvs.FreeLocals
-           |> Internal.Utilities.Collections.Zset.forall (fun v ->
+           |> Zset.forall (fun v ->
                v.ValReprInfo.IsSome
                || (v.BaseOrThisInfo = NormalVal
                    && isThunkableTy v.Type
@@ -1163,46 +1161,41 @@ let CompilePatternBasic
                    && not v.IsMutable))
 
     // Reference identities make key collisions conservative: distinct nodes never fuse.
-    let patternNodeId =
-        let ids = System.Collections.Generic.Dictionary<Pattern, int>(HashIdentity.Reference)
-        fun (pat: Pattern) ->
-            match ids.TryGetValue pat with
+    let nodeIds () =
+        let ids = Dictionary<_, int>(HashIdentity.Reference)
+
+        fun node ->
+            match ids.TryGetValue node with
             | true, v -> v
             | _ ->
                 let v = ids.Count
-                ids[pat] <- v
+                ids[node] <- v
                 v
+
+    let patternNodeId: Pattern -> int = nodeIds ()
+    let boundExprNodeId: Expr -> int = nodeIds ()
 
     let frontierActiveKey (Active(path, _, pat)) =
         frontierPathKey path + "#" + string (patternNodeId pat)
 
-    let boundExprNodeId =
-        let ids = System.Collections.Generic.Dictionary<Expr, int>(HashIdentity.Reference)
-        fun (e: Expr) ->
-            match ids.TryGetValue e with
-            | true, v -> v
-            | _ ->
-                let v = ids.Count
-                ids[e] <- v
-                v
-
+    // Members are keyed by declaring stamp and index, as their names could embed the separators used here.
     let rec boundExprKey (e: Expr) =
+        let sub args = "(" + String.concat "," (List.map boundExprKey args) + ")"
+
         match stripDebugPoints e with
         | Expr.Val(vref, _, _) -> "v" + string vref.Stamp
-        | Expr.Op(TOp.TupleFieldGet(_, j), _, [ arg ], _) -> "t" + string j + "(" + boundExprKey arg + ")"
-        | Expr.Op(TOp.ValFieldGet rfref, _, args, _) -> "r" + rfref.FieldName + "(" + String.concat "," (List.map boundExprKey args) + ")"
-        | Expr.Op(TOp.UnionCaseFieldGet(ucref, j), _, args, _) -> "u" + ucref.CaseName + "_" + string j + "(" + String.concat "," (List.map boundExprKey args) + ")"
-        | Expr.Op(TOp.Coerce, _, [ arg ], _) -> "c(" + boundExprKey arg + ")"
+        | Expr.Op(TOp.TupleFieldGet(_, j), _, [ arg ], _) -> "t" + string j + sub [ arg ]
+        | Expr.Op(TOp.ValFieldGet(RecdFieldRef(tcref, _) as rfref), _, args, _) ->
+            "r" + string tcref.Stamp + "_" + string rfref.Index + sub args
+        | Expr.Op(TOp.UnionCaseFieldGet(UnionCaseRef(tcref, _) as ucref, j), _, args, _) ->
+            "u" + string tcref.Stamp + "_" + string ucref.Index + "_" + string j + sub args
+        | Expr.Op(TOp.Coerce, _, [ arg ], _) -> "c" + sub [ arg ]
         | _ -> "?" + string (boundExprNodeId e)
 
     let frontierValMapKey (valMap: ValMap<Expr>) =
-        if valMap.IsEmpty then
-            ""
-        else
-            valMap.Contents
-            |> Seq.map (fun (KeyValue (stamp, boundExpr)) -> string stamp + "=" + boundExprKey boundExpr)
-            |> Seq.sort
-            |> String.concat ";"
+        valMap.Contents
+        |> Seq.map (fun (KeyValue(stamp, boundExpr)) -> string stamp + "=" + boundExprKey boundExpr)
+        |> String.concat ";"
 
     let frontiersStateKey frontiers =
         frontiers
@@ -1212,16 +1205,19 @@ let CompilePatternBasic
 
     // The match input stays in scope at the outer join binding; only tree-bound locals need parameters.
     let capturedValsOfFrontiers frontiers =
-        let acc = System.Collections.Generic.Dictionary<Stamp, Val>()
-        let addFreeLocals (e: Expr) =
-            for v in Internal.Utilities.Collections.Zset.elements (freeInExpr CollectLocals e).FreeLocals do
-                if v.Stamp <> origInputVal.Stamp then acc[v.Stamp] <- v
-        for Frontier(_, actives, valMap) in frontiers do
-            for Active(_, subexpr, _) in actives do
-                addFreeLocals (GetSubExprOfInput subexpr)
-            for KeyValue(_, boundExpr) in valMap.Contents do
-                addFreeLocals boundExpr
-        acc.Values |> List.ofSeq |> List.sortBy (fun v -> v.Stamp)
+        let accExpr acc e = accFreeInExpr CollectLocals e acc
+
+        let fvs =
+            (emptyFreeVars, frontiers)
+            ||> List.fold (fun acc (Frontier(_, actives, valMap)) ->
+                let acc =
+                    (acc, actives)
+                    ||> List.fold (fun acc (Active(_, subexpr, _)) -> accExpr acc (GetSubExprOfInput subexpr))
+
+                (acc, valMap.Contents)
+                ||> Seq.fold (fun acc (KeyValue(_, boundExpr)) -> accExpr acc boundExpr))
+
+        fvs.FreeLocals |> Zset.elements |> List.filter (fun v -> v.Stamp <> origInputVal.Stamp)
 
     let callJoinThunk (joinE: Expr) (joinThunkTy: TType) (caps: Val list) =
         let targetParams = caps |> List.map (fun v -> fst (mkCompGenLocal mMatch "joinArg" v.Type))
@@ -1229,11 +1225,10 @@ let CompilePatternBasic
         let idx = matchBuilder.AddTarget(TTarget(targetParams, mkApps g ((joinE, joinThunkTy), [], args, mMatch), None))
         TDSuccess(caps |> List.map (exprForVal mMatch), idx)
 
+    // The main recursive loop of the pattern match compiler.
     let rec InvestigateFrontiers refuted frontiers =
         Cancellable.CheckAndThrow()
-        stackGuard.Guard(fun () -> InvestigateFrontiersImpl refuted frontiers)
 
-    and InvestigateFrontiersImpl refuted frontiers =
         match frontiers with
         | [] -> failwith "CompilePattern: compile - empty clauses: at least the final clause should always succeed"
         | Frontier (i, active, valMap) :: rest ->
@@ -1284,12 +1279,12 @@ let CompilePatternBasic
         | Some whenExpr ->
             let m = whenExpr.Range
             let whenExprWithBindings = mkLetsFromBindings m (mkInvisibleBinds vs2 es2) whenExpr
-            let failureTree = investigateMemoized (RefutedWhenClause :: refuted) rest
+            let failureTree = InvestigateMemoized (RefutedWhenClause :: refuted) rest
             mkBoolSwitch m whenExprWithBindings successTree failureTree
 
         | None -> successTree
 
-    and investigateMemoized refuted frontiers =
+    and InvestigateMemoized refuted frontiers =
         if warnOnIncomplete then
             InvestigateFrontiers refuted frontiers
         else
@@ -1320,8 +1315,9 @@ let CompilePatternBasic
                             valRemap = ValMap.OfList (List.map2 (fun (c: Val) (p: Val) -> c, mkLocalValRef p) caps paramVals) }
                     let body = remapExpr g CloneAll remap joinBody.Value
                     let unitV, _ = mkCompGenLocal mMatch "unitArg" g.unit_ty
-                    let joinThunkTy = List.foldBack (fun (p: Val) acc -> mkFunTy g p.Type acc) paramVals (mkFunTy g g.unit_ty resultTy)
-                    let joinLam = mkLambdas g mMatch [] (paramVals @ [unitV]) (body, resultTy)
+                    let lamVals = paramVals @ [ unitV ]
+                    let joinThunkTy = mkIteratedFunTy g [ for v in lamVals -> v.Type ] resultTy
+                    let joinLam = mkLambdas g mMatch [] lamVals (body, resultTy)
                     let joinV, joinE = mkCompGenLocal mMatch "joinThunk" joinThunkTy
                     joinBindings.Add(mkInvisibleBind joinV joinLam)
                     (joinE, joinThunkTy)
@@ -1482,7 +1478,7 @@ let CompilePatternBasic
 
                  let frontiers = frontiers |> List.collect (GenerateNewFrontiersAfterSuccessfulInvestigation taken inpExprOpt resPostBindOpt investigation)
 
-                 let tree = investigateMemoized refuted frontiers
+                 let tree = InvestigateMemoized refuted frontiers
 
                  // Bind the resVar for the union case, if we have one
                  let tree =
@@ -1521,7 +1517,7 @@ let CompilePatternBasic
             | [] ->
                 None
             | _ ->
-                Some(investigateMemoized refuted fallthroughPathFrontiers)
+                Some(InvestigateMemoized refuted fallthroughPathFrontiers)
 
     // Build a new frontier that represents the result of a successful investigation
     and GenerateNewFrontiersAfterSuccessfulInvestigation taken inpExprOpt resPostBindOpt investigation frontier =

@@ -74,10 +74,11 @@ System.Console.WriteLine(viaCtor.ToString() = viaRecord.ToString())
 
     let private renderGuardedOrQuote quoteExpr =
         renderFsx (
-            "let (|E|_|) (n: int) (x: int) = if x = n then Some x else None\n"
-            + "let (|A|_|) (x: int) = if x % 2 = 0 then Some (x / 2) else None\n"
-            + "let g (p: int) = p > 1000\n"
-            + sprintf "printfn \"%%A\" %s" quoteExpr
+            """let (|E|_|) (n: int) (x: int) = if x = n then Some x else None
+let (|A|_|) (x: int) = if x % 2 = 0 then Some (x / 2) else None
+let g (p: int) = p > 1000
+printfn "%A" """
+            + quoteExpr
         )
 
     [<Theory>]
